@@ -1,0 +1,62 @@
+Z80 Microcomputer Emulator  Don Goodeve  don@cs.york.ac.uk
+==========================
+This package implements an interactive Z80 microcomputer system
+emulator. The emulation is based on an underlying Z80 emulator
+developed by Marat Fayzullin (fms@freeflight.com) (obtained from
+http://www.freeflight.com/fms/EMUL8/Z80-032797.tar.Z). 
+
+Use of Software
+===============
+This package may be used and modified for any non-commercial purpose,
+provided that:
+
+  i) This file remains intact and forms part of any
+     further distribution of this code.
+
+  ii) Proper attribution is made to the author of this code;
+      (Don Goodeve, don@cs.york.ac.uk).
+
+General:
+========
+The emulator allows the user to control the execution of a Z80 CPU
+attatched to RAM/ROM and IO ports. Code can be loaded either by hand
+(hand assembled), or from an a.out file. Watch areas and breakpoints
+can be set to monitor the execution of the processor.  The emulator
+also combines facilities for displaying and setting the state of CPU
+registers, observing and disassembling memory.
+
+To build the package:
+====================
+The src directory contains all the sources for the emulator.  Marat
+Fayzullin's tarfile should be unpacked in this directory, generating
+the directory 'Z80'.  The 'man' directory contains UNIX man pages for
+the emulator tool (em80).
+
+The package is known to build successfully under IRIX 5.2 on an SGI
+Indy workstation. The resources needed to build the program are
+bison/yacc, lex ('flex' causes some problems when used to build
+interractive lexical analysers), and patch.
+
+Things to change:
+-----------------
+
+i) In src/Makefile, the CFLAGS variable should contain either
+   -DMSB_FIRST or -DLSB_FIRST depending on whether your machine
+   is big or little-endian. (SGI MIPS is big-endian).
+
+ii) in src/download.c -- modify the include line to pick up
+    a version of 'a.out.h' relevant to your local Z80 cross
+    development tools. This describes the format of the
+    object files that the emulator will load.
+
+iii) Ensure that the compiler, yacc and lex referred to in
+     src/Makefile refer to your locally available tools.
+
+Building:
+---------
+cd into the src directory and type 'make all'. This will build
+all the applications in the package.
+
+---
+don@cs.york.ac.uk  Wed May 14 20:23:11 BST 1997
+

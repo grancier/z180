@@ -1,0 +1,116 @@
+Error at file 'boot.mac' line 1: invalid single quoted character
+Error at file 'boot.mac' line 8: syntax error
+Error at file 'boot.mac' line 10: syntax error
+Error at file 'boot.mac' line 11: syntax error
+Error at file 'boot.mac' line 13: syntax error
+Error at file 'boot.mac' line 14: syntax error
+Error at file 'boot.mac' line 15: syntax error
+Error at file 'boot.mac' line 18: syntax error
+Error at file 'boot.mac' line 19: syntax error
+Error at file 'boot.mac' line 20: syntax error
+Error at file 'boot.mac' line 22: syntax error
+Error at file 'boot.mac' line 23: syntax error
+Error at file 'boot.mac' line 24: syntax error
+Error at file 'boot.mac' line 25: syntax error
+Error at file 'boot.mac' line 27: syntax error
+Error at file 'boot.mac' line 29: syntax error
+Error at file 'boot.mac' line 31: syntax error
+Error at file 'boot.mac' line 32: syntax error
+Error at file 'boot.mac' line 34: syntax error
+Error at file 'boot.mac' line 35: syntax error
+Error at file 'boot.mac' line 37: syntax error
+Error at file 'boot.mac' line 39: syntax error
+Error at file 'boot.mac' line 42: syntax error
+Error at file 'boot.mac' line 46: syntax error
+Error at file 'boot.mac' line 48: syntax error
+Error at file 'boot.mac' line 49: syntax error
+Error at file 'boot.mac' line 50: syntax error
+Error at file 'boot.mac' line 53: syntax error
+Error at file 'boot.mac' line 57: syntax error
+Error at file 'boot.mac' line 61: syntax error
+Error at file 'boot.mac' line 62: syntax error
+Error at file 'boot.mac' line 63: syntax error
+Error at file 'boot.mac' line 64: syntax error
+Error at file 'boot.mac' line 65: syntax error
+Error at file 'boot.mac' line 66: syntax error
+Error at file 'boot.mac' line 67: syntax error
+Error at file 'boot.mac' line 69: syntax error
+Error at file 'boot.mac' line 72: syntax error
+Error at file 'boot.mac' line 78: syntax error
+Error at file 'boot.mac' line 84: syntax error
+Error at file 'boot.mac' line 87: syntax error
+Error at file 'boot.mac' line 88: syntax error
+Error at file 'boot.mac' line 89: syntax error
+Error at file 'boot.mac' line 90: syntax error
+Error at file 'boot.mac' line 106: syntax error
+Error at file 'boot.mac' line 107: syntax error
+Error at file 'boot.mac' line 108: syntax error
+Error at file 'boot.mac' line 112: syntax error
+Error at file 'boot.mac' line 113: syntax error
+Error at file 'boot.mac' line 114: syntax error
+Error at file 'boot.mac' line 117: syntax error
+Error at file 'boot.mac' line 119: syntax error
+Error at file 'boot.mac' line 120: syntax error
+Error at file 'boot.mac' line 122: syntax error
+Error at file 'boot.mac' line 123: syntax error
+Error at file 'boot.mac' line 124: syntax error
+Error at file 'boot.mac' line 125: syntax error
+Error at file 'boot.mac' line 126: syntax error
+Error at file 'boot.mac' line 127: syntax error
+Error at file 'boot.mac' line 130: syntax error
+Error at file 'boot.mac' line 131: syntax error
+Error at file 'boot.mac' line 132: syntax error
+Error at file 'boot.mac' line 133: syntax error
+Error at file 'boot.mac' line 134: syntax error
+Error at file 'boot.mac' line 135: invalid single quoted character
+Error at file 'boot.mac' line 137: invalid single quoted character
+Error at file 'boot.mac' line 138: syntax error
+Error at file 'boot.mac' line 139: syntax error
+Error at file 'boot.mac' line 140: syntax error
+Error at file 'boot.mac' line 141: syntax error
+Error at file 'boot.mac' line 142: syntax error
+Error at file 'boot.mac' line 143: invalid single quoted character
+Error at file 'boot.mac' line 144: syntax error
+Error at file 'boot.mac' line 145: syntax error
+Error at file 'boot.mac' line 146: syntax error
+Error at file 'boot.mac' line 147: syntax error
+Error at file 'boot.mac' line 150: syntax error
+Error at file 'boot.mac' line 155: syntax error
+Error at file 'boot.mac' line 156: syntax error
+Error at file 'boot.mac' line 238: syntax error
+Error at file 'boot.mac' line 246: syntax error
+Error at file 'boot.mac' line 256: syntax error
+Error at file 'boot.mac' line 257: syntax error
+Error at file 'boot.mac' line 263: syntax error
+Error at file 'boot.mac' line 275: syntax error
+Error at file 'boot.mac' line 283: syntax error
+Error at file 'boot.mac' line 304: syntax error
+Error at file 'boot.mac' line 308: syntax error
+Error at file 'boot.mac' line 309: syntax error
+Error at file 'boot.mac' line 311: syntax error
+Error at file 'boot.mac' line 312: syntax error
+Error at file 'boot.mac' line 315: syntax error
+Error at file 'boot.mac' line 319: syntax error
+Error at file 'boot.mac' line 320: syntax error
+Error at file 'boot.mac' line 322: syntax error
+Error at file 'boot.mac' line 323: syntax error
+Error at file 'boot.mac' line 325: syntax error
+Error at file 'boot.mac' line 326: syntax error
+Error at file 'boot.mac' line 328: syntax error
+Error at file 'boot.mac' line 329: syntax error
+Error at file 'boot.mac' line 331: syntax error
+Error at file 'boot.mac' line 332: syntax error
+Error at file 'boot.mac' line 333: syntax error
+Error at file 'boot.mac' line 334: syntax error
+Error at file 'boot.mac' line 336: syntax error
+Error at file 'boot.mac' line 44: symbol 'cdisk' not defined
+Error at file 'boot.mac' line 85: symbol 'hd1' not defined
+Error at file 'boot.mac' line 249: symbol 'noM' not defined
+Error at file 'boot.mac' line 254: symbol 'bdos' not defined
+Error at file 'boot.mac' line 273: symbol 'bdos' not defined
+Error at file 'boot.mac' line 280: symbol 'bdos' not defined
+Error at file 'boot.mac' line 282: symbol 'operr' not defined
+Error at file 'boot.mac' line 285: symbol 'bdos' not defined
+Error at file 'boot.mac' line 289: symbol 'bdos' not defined
+Error at file 'boot.mac' line 292: symbol 'bdos' not defined
+Error at file 'boot.mac' line 306: symbol 'errmsg' not defined

@@ -1,0 +1,90 @@
+							4 Frebruary 2006
+
+This ROMv5.1 merges changes from v4b4 and v5. The release includes an
+updated version of Paul Aktrstam port of Tiny BASIC for the P112 in
+a separate HEX file.
+
+							20 October 2005
+
+This ROMv5 update began with Hal's v4b ROM covered below.  It includes
+a few fixes and adds the following:
+
+	- The NvRam now stores an added flag - Hardware Flow Control.
+	  The default is "None."  Selecting "Y" in the setup menu
+	  allows for much higher terminal baud rates without overflow
+	  for those terminals that can use it.  The status of this
+	  flag is also passed to the CP/M BIOS for use in the CONOUT:
+	  driver.
+
+	- All references to the DS-1202 Clock were changed to DS-1302
+	  to reflect a hardware change in the new release of the P112.
+
+							14 December 2004
+
+This update 4b4 of the P112 ROM contains the following enhancements:
+
+	- Non-destructive RAM scan procedure. The contents of ramdisks
+	  (for OSes that support them) is now preserved between resets.
+	  Note that this applies only to the memory above the first 64k,
+	  the area 0000..7FFF is still used for shadowing the ROM, and
+	  8000..FFFF is still cleared at startup.
+
+	- Bug correction in RTime: mon12 was missing from monTbl. That
+	  caused the Boot ROM to print garbage in response to the T command
+	  when the DS1202 clock date was invalid.
+
+	- The GIDE disk driver now recognizes "standard" boot sectors
+	  and not only the "new" format.
+
+	- Z80182 register setup is now performed in the correct order,
+	  a software reset done by jumping to ROM address 0 now works
+	  cleanly.
+
+Hector Peraza,
+14 Dec 2004.
+
+							12 July 1997
+
+This update of the P112 ROM incorporates all known updates provided by
+Dave Brooks as of mid-June 1997.  It also adds the following features:
+
+	- Configuration of Non-Volatile Clock RAM settings with default
+	  values selected by simply entering a Carriage Return.
+
+	- Setting and Displaying of the Date/Time from the DS-1202
+	  Clock. The Year will be accurate over the range 1978-2076 by
+	  assuming that year values 78..99 are in the twentieth century
+	  (19xx), and years in 00..77 are in the twenty-first century
+	  (20xx).  Setting of the date may be entered as Month/Day/
+	  Year -or- Day.Month.Year.  The Key to interpreting the values
+	  is the serperator ("/" or ".").
+
+	- A slight delay is included prior to the Boot ROM code setting
+	  wait state delays as a safety valve in case an inadequate
+	  number of wait states is configured.  The delay allows one
+	  to enter the Setup routine directly to avoid locking the
+	  system (selected by pressing ESCape at the pause prompt). The
+	  delay also allows direct entry into the Debugger by pressing
+	  the Enter (Return) key.  If no key is pressed, the boot
+	  sequence will start after approximately a 6-second pause.
+
+	- To accomodate the new commands, the Boot command from the
+	  Debugger was changed from "S" (which is now the SETUP com-
+	  mand) to "Z" which can stand for whatever you desire.  Argu-
+	  ments allowed with this command are:
+		Z	Attempt to boot from the first available device
+			 (Floppy 0, SCSI 0, GIDE (IDE) Master).
+		Z 1	Attempt to Boot Floppy Unit 0 only.
+		Z 2	Attempt to Boot SCSI Unit 0 only.
+		Z 3	Attempt to Boot GIDE (IDE) Master only.
+	  The "T" command displays the Time and Date, while "T S"
+	  prompts you for information with which to set the Time and
+	  Date.
+
+The files comprising this version of the bios have been successfully
+assembled with the SLR180+ (no longer available) and Al Hawley's ZMAC
+assembler.
+
+Harold "Hal" Bower
+12 July 1997
+

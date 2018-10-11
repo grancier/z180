@@ -1,0 +1,225 @@
+.TH em80 1 LOCAL
+.SH NAME
+em80 \- Z80 Microprocessor emulator
+.SH SYNOPSIS
+.B em80
+
+.SH DESCRIPTION
+.I em80
+Is a command-line based interactive emulator for the Z80 microprocessor. It
+allows a user to configure a simple system with areas of memory, download code
+and then observe the execution of that code. Editing tools allow the state
+of memory and CPU registers to be modified. Single-stepping, watch areas and
+break points can be used to enable the user to control and observe the
+important aspects of execution. The emulator also includes a simple
+Z80 code disassembler.
+
+Initially the emulated system contains
+.I no memory.
+The memory space must be constructed before it can be
+used, using the
+.I RAM
+and
+.I ROM
+commands.
+
+The emulator is driven from a command line. It understands a simple
+set of commands. Arguments to commands can be of two kinds;
+.I numbers
+and
+.I strings.
+Numbers are expressed in either
+.I binary
+as a sequence of binary digits suffixed by
+.I b,
+or in hexadecimal as a sequence of hexadecimal digits suffixed by
+.I h.
+Word length is important; commands expect
+.I addresses
+to be
+.I 16-bit
+values. Values written into memory can be 
+.I 1, 2 or 4 bytes
+long. Corresponding to the byte-order expected by the Z80 CPU, such values
+are written in
+.I little-endian
+byte order (ie. LSB is byte 0 in a word).
+
+.SH COMMANDS
+The emulator is controlled using the following commands:
+.TP
+.B help [command]
+Display general help, or help on the specified command.
+.TP
+.B exit
+Finish the emulation session, loosing all data.
+.TP
+.B reset
+Reset the CPU; returns all machine registers to their initial state.
+.TP
+.B display
+Display the current state of all CPU registers, including the shadow registers.
+.TP
+.B set addr1 [{addr2 value}|value]
+Set the contents of the byte/short/word starting at
+.I addr1
+to
+.I value.
+The length of
+.I value
+determines the number of bytes written. Multi-byte values are written
+in
+.I little-endian
+byte order.
+If
+.I two addresses
+are given, the specified value will be written across the block of
+memory between
+.I addr1
+and
+.I addr2.
+If no value argument is specified, 
+.I address 
+initialises a
+.I write-pointer.
+Subsequent commands of the form `value' will
+write into the address the pointer references, advancing the write pointer
+by the appropriate number of bytes.
+.TP
+.B value
+Once the
+.I write-pointer
+has been initialised by a command of the form `set address', commands
+of the form `value' will write the value to memory starting at the specified
+address, advancing the write-pointer. This provides a rapid mechanism
+for initialising the contents of a block of memory.
+
+.TP
+.B set register value
+Set the contents of the specified machine register (or register pair)
+to the specified value. The value must be of the correct length to
+fit into the register (pair). The available register names are:
+.br
+.I A,A',F,F',B,B',C,C',D,D',E,E',H,H',L,L',I.
+(8 bits).
+.br
+.I AF,AF',BC,BC',DE,DE',HL,HL',IX,IY,PC,SP.
+(16 bits).
+.TP
+.B RAM addr1 addr2
+Creates an area of RAM including addresses
+.I addr1
+and
+.I addr2.
+For convenience the 64K address space is subdivided into 256 Byte blocks.
+The area of RAM created therefore will be a multiple of 256 bytes long.
+.TP
+.B ROM addr1 addr2
+Creates an area of ROM including addresses
+.I addr1
+and
+.I addr2.
+Unlike RAM, the contents of ROM cannot be changed by executing machine
+instructions, however they can be changed by loading an
+.I object file
+or by using the
+.I set
+command.
+.TP
+.B load objfile address
+Load the
+.I program text
+part of the Z80 object file into memory, starting at the specified address. 
+.TP
+.B mem [addr1 [addr2]] [b|s|w]
+Display the contents of memory. The display runs just before and after the stack
+pointer if no addresses are given, from 
+.I addr1
+for a short range if one address is given, or between
+.I addr1
+and
+.I addr2
+if two addresses are given. By default the memory contents are displayed
+as bytes. If the optional command suffix 
+.I s
+or
+.I w
+is given, the memory contents will be displayed as
+.I 16
+or
+.I 32
+bit words respectively, in little-endian byte order.
+.TP
+.B dis addr1 [addr2]
+Disassemble memory as a Z80 instruction stream between the specified
+addresses, or running from addr1 for a short distance if only one
+address is specified.
+.TP
+.B step
+Execute a single instruction, returning control immediately to the
+command line.
+.TP
+.B run
+Commence CPU execution. Execution will be terminated when the program
+hits a
+.I break point,
+accesses memory in a
+.I watch area,
+requests data from an
+.I input port,
+or has executed
+.I 10,000 instructions.
+.TP
+.B break address
+Sets a break point at the specified address. Just before the CPU executes
+the instruction at the breakpoint, control will be returned to the command
+line.
+.TP
+.B watch addr1 [addr2]
+Sets a watch range at
+.I addr1,
+or spanning
+.I addr1
+and
+.I addr2.
+When the CPU attempts to read or write data in this range of memory addresses,
+control will be returned to the command line. Instruction fetches as well
+as other accesses are trapped.
+.TP
+.B clear break|watch
+Clear either all breakpoints or all watchpoints.
+.TP
+.B show
+Show all currently set breakpoints and watch areas.
+.TP
+.B int [vector]
+Raises an interrupt on the specified vector; if no vector is specified, the
+.I NMI
+vector
+.I 0x0066
+is used. The command warns if a maskable interrupt is specified that the
+CPU is unable to respond to because of the status of the
+.I IFF
+CPU flag.
+
+.SH "SEE ALSO"
+.IR as80(1),
+.I Z80 Microprocessor family User's Manual.
+
+.SH BUGS
+None known. The application has not been tested by a large enough
+set of users to be confident of its reliability yet. People willing
+to test the application and report their experience are welcome.
+
+.SH SHORTCOMINGS
+Currently there is no way of storing the state of the emulator to
+allow a user to run a session over more than one execution of the
+application. If this is required, it will be added.
+
+.SH CONTACT
+Please direct any comments about the
+.I em80
+application to the author
+.I Don Goodeve
+(email don@cs.york.ac.uk).
+

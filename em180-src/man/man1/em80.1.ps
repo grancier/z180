@@ -1,0 +1,1408 @@
+%!PS-Adobe-1.0
+%%Title: stdin (ditroff)
+%%CreationDate: Fri Oct 24 19:20:52 1997
+%%EndComments
+%%BeginResource: TranScript
+% Start of psdit.pro -- prolog for ditroff translator
+% Copyright (c) 1985,1987 Adobe Systems Incorporated. All Rights Reserved. 
+% GOVERNMENT END USERS: See Notice file in TranScript library directory
+% -- probably /usr/lib/ps/Notice
+% RCS: $Header: psdit.pro,v 2.2 87/11/17 16:40:42 byron Rel $
+1 setlinejoin
+/$DITroff 140 dict def $DITroff begin
+/fontnum 1 def /fontsize 10 def /fontheight 10 def /fontslant 0 def
+/ixi {/landscape exch def /yoffset exch def /xoffset exch def} def
+/xi {xoffset 72 mul yoffset 72 mul translate landscape {-90 rotate} if
+  72 resolution div dup neg scale 0 0 moveto
+  /fontnum 1 def /fontsize 10 def /fontheight 10 def /fontslant 0 def F} def
+/PB{save /psv exch def currentpoint translate
+  resolution 72 div dup neg scale 0 0 moveto}def
+/PE{psv restore}def
+/m1 matrix def /m2 matrix def /m3 matrix def /oldmat matrix def
+/tan{dup sin exch cos div}bind def
+/point{resolution 72 div mul}bind def
+/dround	{transform round exch round exch itransform}bind def
+/xT{/devname exch def}def
+/xr{/mh exch def /my exch def /resolution exch def}def
+/xp{}def
+/xs{docsave restore end}def
+/xt{}def
+/xf{/fontname exch def /slotno exch def fontnames slotno get fontname eq not
+ {fonts slotno fontname findfont put fontnames slotno fontname put}if}def
+/xH{/fontheight exch def F}bind def
+/xS{/fontslant exch def F}bind def
+/s{/fontsize exch def /fontheight fontsize def F}bind def
+/f{/fontnum exch def F}bind def
+/F{fontheight 0 le {/fontheight fontsize def}if
+   fonts fontnum get fontsize point 0 0 fontheight point neg 0 0 m1 astore
+   fontslant 0 ne{1 0 fontslant tan 1 0 0 m2 astore m3 concatmatrix}if
+   makefont setfont .04 fontsize point mul 0 dround pop setlinewidth}bind def
+/X{exch currentpoint exch pop moveto show}bind def
+/N{3 1 roll moveto show}bind def
+/Y{exch currentpoint pop exch moveto show}bind def
+/S /show load def
+/ditpush{}def/ditpop{}def
+/AX{3 -1 roll currentpoint exch pop moveto 0 exch ashow}bind def
+/AN{4 2 roll moveto 0 exch ashow}bind def
+/AY{3 -1 roll currentpoint pop exch moveto 0 exch ashow}bind def
+/AS{0 exch ashow}bind def
+/MX{currentpoint exch pop moveto}bind def
+/MY{currentpoint pop exch moveto}bind def
+/MXY /moveto load def
+/cb{pop}def	% action on unknown char -- nothing for now
+/n{}def/w{}def
+/p{pop showpage pagesave restore}def
+/np{/pagesave save def xi}def
+/abspoint{currentpoint exch pop add exch currentpoint pop add exch}def
+/dstroke{currentpoint stroke moveto}bind def
+/Dl{2 copy gsave rlineto stroke grestore rmoveto}bind def
+/arcellipse{oldmat currentmatrix pop
+ currentpoint translate 1 diamv diamh div scale /rad diamh 2 div def
+ rad 0 rad -180 180 arc oldmat setmatrix}def
+/Dc{gsave dup /diamv exch def /diamh exch def arcellipse dstroke 
+    grestore diamh 0 rmoveto}def
+/De{gsave /diamv exch def /diamh exch def arcellipse dstroke
+    grestore diamh 0 rmoveto}def
+/Da{currentpoint /by exch def /bx exch def /fy exch def /fx exch def
+   /cy exch def /cx exch def /rad cx cx mul cy cy mul add sqrt def
+   /ang1 cy neg cx neg atan def /ang2 fy fx atan def cx bx add cy by add
+   2 copy rad ang1 ang2 arcn stroke exch fx add exch fy add moveto}def
+/Barray 200 array def % 200 values in a wiggle
+/D~{mark}def
+/D~~{counttomark Barray exch 0 exch getinterval astore /Bcontrol exch def pop
+ /Blen Bcontrol length def Blen 4 ge Blen 2 mod 0 eq and
+ {Bcontrol 0 get Bcontrol 1 get abspoint /Ycont exch def /Xcont exch def
+  Bcontrol 0 2 copy get 2 mul put Bcontrol 1 2 copy get 2 mul put
+  Bcontrol Blen 2 sub 2 copy get 2 mul put
+  Bcontrol Blen 1 sub 2 copy get 2 mul put
+  /Ybi /Xbi currentpoint 3 1 roll def def 0 2 Blen 4 sub
+  {/i exch def
+   Bcontrol i get 3 div Bcontrol i 1 add get 3 div
+   Bcontrol i get 3 mul Bcontrol i 2 add get add 6 div
+   Bcontrol i 1 add get 3 mul Bcontrol i 3 add get add 6 div
+   /Xbi Xcont Bcontrol i 2 add get 2 div add def
+   /Ybi Ycont Bcontrol i 3 add get 2 div add def
+   /Xcont Xcont Bcontrol i 2 add get add def
+   /Ycont Ycont Bcontrol i 3 add get add def
+   Xbi currentpoint pop sub Ybi currentpoint exch pop sub rcurveto
+  }for dstroke}if}def
+end
+/ditstart{$DITroff begin
+ /nfonts 60 def			% NFONTS makedev/ditroff dependent!
+ /fonts[nfonts{0}repeat]def
+ /fontnames[nfonts{()}repeat]def
+/docsave save def
+}def
+
+% character outcalls
+/oc {/pswid exch def /cc exch def /name exch def
+   /ditwid pswid fontsize mul resolution mul 72000 div def
+   /ditsiz fontsize resolution mul 72 div def
+   ocprocs name known{ocprocs name get exec}{name cb}
+   ifelse}def
+/fractm [.65 0 0 .6 0 0] def
+/fraction
+ {/fden exch def /fnum exch def gsave /cf currentfont def
+  cf fractm makefont setfont 0 .3 dm 2 copy neg rmoveto
+  fnum show rmoveto currentfont cf setfont(\244)show setfont fden show 
+  grestore ditwid 0 rmoveto} def
+/oce {grestore ditwid 0 rmoveto}def
+/dm {ditsiz mul}def
+/ocprocs 50 dict def ocprocs begin
+(14){(1)(4)fraction}def
+(12){(1)(2)fraction}def
+(34){(3)(4)fraction}def
+(13){(1)(3)fraction}def
+(23){(2)(3)fraction}def
+(18){(1)(8)fraction}def
+(38){(3)(8)fraction}def
+(58){(5)(8)fraction}def
+(78){(7)(8)fraction}def
+(sr){gsave .05 dm .16 dm rmoveto(\326)show oce}def
+(is){gsave 0 .15 dm rmoveto(\362)show oce}def
+(->){gsave 0 .02 dm rmoveto(\256)show oce}def
+(<-){gsave 0 .02 dm rmoveto(\254)show oce}def
+(==){gsave 0 .05 dm rmoveto(\272)show oce}def
+end
+% DIThacks fonts for some special chars
+50 dict dup begin
+/FontType 3 def
+/FontName /DIThacks def
+/FontMatrix [.001 0.0 0.0 .001 0.0 0.0] def
+/FontBBox [-220 -280 900 900] def% a lie but ...
+/Encoding 256 array def
+0 1 255{Encoding exch /.notdef put}for
+Encoding
+ dup 8#040/space put %space
+ dup 8#110/rc put %right ceil
+ dup 8#111/lt put %left  top curl
+ dup 8#112/bv put %bold vert
+ dup 8#113/lk put %left  mid curl
+ dup 8#114/lb put %left  bot curl
+ dup 8#115/rt put %right top curl
+ dup 8#116/rk put %right mid curl
+ dup 8#117/rb put %right bot curl
+ dup 8#120/rf put %right floor
+ dup 8#121/lf put %left  floor
+ dup 8#122/lc put %left  ceil
+ dup 8#140/sq put %square
+ dup 8#141/bx put %box
+ dup 8#142/ci put %circle
+ dup 8#143/br put %box rule
+ dup 8#144/rn put %root extender
+ dup 8#145/vr put %vertical rule
+ dup 8#146/ob put %outline bullet
+ dup 8#147/bu put %bullet
+ dup 8#150/ru put %rule
+ dup 8#151/ul put %underline
+ pop
+/DITfd 100 dict def
+/BuildChar{0 begin
+ /cc exch def /fd exch def
+ /charname fd /Encoding get cc get def
+ /charwid fd /Metrics get charname get def
+ /charproc fd /CharProcs get charname get def
+ charwid 0 fd /FontBBox get aload pop setcachedevice
+ 40 setlinewidth
+ newpath 0 0 moveto gsave charproc grestore
+ end}def
+/BuildChar load 0 DITfd put
+%/UniqueID 5 def
+/CharProcs 50 dict def
+CharProcs begin
+/space{}def
+/.notdef{}def
+/ru{500 0 rls}def
+/rn{0 750 moveto 500 0 rls}def
+/vr{20 800 moveto 0 -770 rls}def
+/bv{20 800 moveto 0 -1000 rls}def
+/br{20 770 moveto 0 -1040 rls}def
+/ul{0 -250 moveto 500 0 rls}def
+/ob{200 250 rmoveto currentpoint newpath 200 0 360 arc closepath stroke}def
+/bu{200 250 rmoveto currentpoint newpath 200 0 360 arc closepath fill}def
+/sq{80 0 rmoveto currentpoint dround newpath moveto
+    640 0 rlineto 0 640 rlineto -640 0 rlineto closepath stroke}def
+/bx{80 0 rmoveto currentpoint dround newpath moveto
+    640 0 rlineto 0 640 rlineto -640 0 rlineto closepath fill}def
+/ci{355 333 rmoveto currentpoint newpath 333 0 360 arc
+    50 setlinewidth stroke}def
+
+/lt{20 -200 moveto 0 550 rlineto currx 800 2cx s4 add exch s4 a4p stroke}def
+/lb{20 800 moveto 0 -550 rlineto currx -200 2cx s4 add exch s4 a4p stroke}def
+/rt{20 -200 moveto 0 550 rlineto currx 800 2cx s4 sub exch s4 a4p stroke}def
+/rb{20 800 moveto 0 -500 rlineto currx -200 2cx s4 sub exch s4 a4p stroke}def
+/lk{20 800 moveto 20 300 -280 300 s4 arcto pop pop 1000 sub
+    currentpoint stroke moveto
+    20 300 4 2 roll s4 a4p 20 -200 lineto stroke}def
+/rk{20 800 moveto 20 300 320 300 s4 arcto pop pop 1000 sub
+    currentpoint stroke moveto
+    20 300 4 2 roll s4 a4p 20 -200 lineto stroke}def
+/lf{20 800 moveto 0 -1000 rlineto s4 0 rls}def
+/rf{20 800 moveto 0 -1000 rlineto s4 neg 0 rls}def
+/lc{20 -200 moveto 0 1000 rlineto s4 0 rls}def
+/rc{20 -200 moveto 0 1000 rlineto s4 neg 0 rls}def
+end
+
+/Metrics 50 dict def Metrics begin
+/.notdef 0 def
+/space 500 def
+/ru 500 def
+/br 0 def
+/lt 250 def
+/lb 250 def
+/rt 250 def
+/rb 250 def
+/lk 250 def
+/rk 250 def
+/rc 250 def
+/lc 250 def
+/rf 250 def
+/lf 250 def
+/bv 250 def
+/ob 350 def
+/bu 350 def
+/ci 750 def
+/bx 750 def
+/sq 750 def
+/rn 500 def
+/ul 500 def
+/vr 0 def
+end
+
+DITfd begin
+/s2 500 def /s4 250 def /s3 333 def
+/a4p{arcto pop pop pop pop}def
+/2cx{2 copy exch}def
+/rls{rlineto stroke}def
+/currx{currentpoint pop}def
+/dround{transform round exch round exch itransform} def
+end
+end
+/DIThacks exch definefont pop
+
+%%EndResource
+%%EndProlog
+%%BeginSetup
+ditstart
+(psc)xT
+576 1 1 xr
+1(Times-Roman)xf
+0.00 11.88 false ixi
+%%EndSetup
+
+%%Page: 1 1
+np
+10 s 0 xH 0 xS
+1(Times-Roman)xf
+1 f
+338 384(em80)N
+528(\()X
+568(1)X
+621(\))X
+2204(\(LOCAL\))X
+4060(em80)X
+4250(\()X
+4290(1)X
+4343(\))X
+9 s
+3(Times-Bold)xf
+3 f
+338 768(NAME)N
+10 s
+1 f
+626 864(em80)N
+10(Symbol)xf
+10 f
+823(-)X
+1 f
+887(Z80)X
+1036(Microprocessor)X
+1556(emulator)X
+9 s
+3 f
+338 998(SYNOPSIS)N
+10 s
+5(Courier)xf
+5 f
+626 1094(em80)N
+9 s
+3 f
+338 1324 -0.4062(DESCRIPTION)AN
+10 s
+2(Times-Italic)xf
+2 f
+626 1420(em80)N
+1 f
+821(Is)X
+902(a)X
+960(command-line)X
+1443(based)X
+1647(interactive)X
+2005(emulator)X
+2311(for)X
+2428(the)X
+2549(Z80)X
+2702(microprocessor.)X
+3238(It)X
+3311(allows)X
+3542(a)X
+3601(user)X
+3758(to)X
+3844(con\256gure)X
+4169(a)X
+4228(sim-)X
+626 1516(ple)N
+743(system)X
+984(with)X
+1145(areas)X
+1328(of)X
+1415(memory,)X
+1721(download)X
+2055(code)X
+2225(and)X
+2360(then)X
+2517(observe)X
+2785(the)X
+2902(execution)X
+3231(of)X
+3318(that)X
+3457(code.)X
+3647(Editing)X
+3902(tools)X
+4077(allow)X
+4273(the)X
+626 1612(state)N
+800(of)X
+896(memory)X
+1191(and)X
+1335(CPU)X
+1518(registers)X
+1818(to)X
+1910(be)X
+2015(modi\256ed.)X
+2348(Single-stepping,)X
+2898(watch)X
+3117(areas)X
+3310(and)X
+3455(break)X
+3662(points)X
+3887(can)X
+4027(be)X
+4132(used)X
+4308(to)X
+626 1708(enable)N
+858(the)X
+980(user)X
+1138(to)X
+1225(control)X
+1476(and)X
+1616(observe)X
+1889(the)X
+2011(important)X
+2346(aspects)X
+2600(of)X
+2692(execution.)X
+3046(The)X
+3195(emulator)X
+3503(also)X
+3656(includes)X
+3946(a)X
+4005(simple)X
+4241(Z80)X
+626 1804(code)N
+796(disassembler.)X
+626 1996(Initially)N
+907(the)X
+1033(emulated)X
+1353(system)X
+1603(contains)X
+2 f
+1897(no)X
+2006(memory.)X
+1 f
+2310(The)X
+2463(memory)X
+2758(space)X
+2964(must)X
+3149(be)X
+3254(constructed)X
+3651(before)X
+3885(it)X
+3959(can)X
+4099(be)X
+4204(used,)X
+626 2092(using)N
+819(the)X
+2 f
+936(RAM)X
+1 f
+1120(and)X
+2 f
+1255(ROM)X
+1 f
+1447(commands.)X
+626 2284(The)N
+770(emulator)X
+1073(is)X
+1146(driven)X
+1370(from)X
+1546(a)X
+1601(command)X
+1935(line.)X
+2094(It)X
+2163(understands)X
+2564(a)X
+2620(simple)X
+2853(set)X
+2962(of)X
+3050(commands.)X
+3436(Arguments)X
+3811(to)X
+3894(commands)X
+4260(can)X
+626 2380(be)N
+723(of)X
+812(two)X
+953(kinds;)X
+2 f
+1170(numbers)X
+1 f
+1466(and)X
+2 f
+1603(strings.)X
+1 f
+1862(Numbers)X
+2176(are)X
+2295(expressed)X
+2631(in)X
+2715(either)X
+2 f
+2918(binary)X
+1 f
+3147(as)X
+3234(a)X
+3290(sequence)X
+3602(of)X
+3690(binary)X
+3915(digits)X
+4113(suf\256xed)X
+626 2476(by)N
+2 f
+735(b,)X
+1 f
+824(or)X
+920(in)X
+1011 -0.3250(hexadecimal)AX
+1441(as)X
+1536(a)X
+1600(sequence)X
+1920(of)X
+2016 -0.3250(hexadecimal)AX
+2446(digits)X
+2652(suf\256xed)X
+2939(by)X
+2 f
+3049(h.)X
+1 f
+3139(Word)X
+3351(length)X
+3580(is)X
+3663(important;)X
+4025(commands)X
+626 2572(expect)N
+2 f
+858(addresses)X
+1 f
+1197(to)X
+1283(be)X
+2 f
+1382(16-bit)X
+1 f
+1597(values.)X
+1844(Values)X
+2088(written)X
+2337(into)X
+2485(memory)X
+2775(can)X
+2909(be)X
+2 f
+3008(1,)X
+3092(2)X
+3156(or)X
+3251(4)X
+3315(bytes)X
+1 f
+3502(long.)X
+3688(Corresponding)X
+4187(to)X
+4273(the)X
+626 2668(byte-order)N
+979(expected)X
+1281(by)X
+1381(the)X
+1498(Z80)X
+1647(CPU,)X
+1841(such)X
+2007(values)X
+2230(are)X
+2347(written)X
+2592(in)X
+2 f
+2674(little-endian)X
+1 f
+3083(byte)X
+3240(order)X
+3429(\(ie.)X
+3553(LSB)X
+3719(is)X
+3792(byte)X
+3949(0)X
+4009(in)X
+4091(a)X
+4146(word\).)X
+9 s
+3 f
+338 2898 -0.8482(COMMANDS)AN
+10 s
+1 f
+626 2994(The)N
+770(emulator)X
+1073(is)X
+1146(controlled)X
+1489(using)X
+1682(the)X
+1799(following)X
+2129(commands:)X
+5 f
+626 3128(help)N
+866([command])X
+1 f
+914 3224(Display)N
+1181(general)X
+1435(help,)X
+1612(or)X
+1699(help)X
+1856(on)X
+1956(the)X
+2073(specified)X
+2380(command.)X
+5 f
+626 3358(exit)N
+1 f
+914(Finish)X
+1133(the)X
+1250(emulation)X
+1588(session,)X
+1858(loosing)X
+2113(all)X
+2212(data.)X
+5 f
+626 3492(reset)N
+1 f
+914(Reset)X
+1110(the)X
+1227(CPU;)X
+1423(returns)X
+1665(all)X
+1764(machine)X
+2053(registers)X
+2343(to)X
+2425(their)X
+2591(initial)X
+2796(state.)X
+5 f
+626 3626(display)N
+1 f
+914 3722(Display)N
+1181(the)X
+1298(current)X
+1544(state)X
+1709(of)X
+1796(all)X
+1895(CPU)X
+2069(registers,)X
+2379(including)X
+2700(the)X
+2817(shadow)X
+3080(registers.)X
+5 f
+626 3856(set)N
+818(addr1)X
+1106([{addr2)X
+1490(value}|value])X
+1 f
+914 3952(Set)N
+1050(the)X
+1183(contents)X
+1484(of)X
+1587(the)X
+1720(byte/short/word)X
+2261(starting)X
+2536(at)X
+2 f
+2629(addr1)X
+1 f
+2856(to)X
+2 f
+2954(value.)X
+1 f
+3182(The)X
+3342(length)X
+3577(of)X
+2 f
+3680(value)X
+1 f
+3888(determines)X
+4273(the)X
+914 4048(number)N
+1191(of)X
+1291(bytes)X
+1492(written.)X
+1770(Multi-byte)X
+2143(values)X
+2379(are)X
+2509(written)X
+2767(in)X
+2 f
+2862(little-endian)X
+1 f
+3284(byte)X
+3453(order.)X
+3694(If)X
+2 f
+3780(two)X
+3927(addresses)X
+1 f
+4273(are)X
+914 4144(given,)N
+1132(the)X
+1250(specified)X
+1558(value)X
+1751(will)X
+1895(be)X
+1991(written)X
+2237(across)X
+2457(the)X
+2575(block)X
+2774(of)X
+2863(memory)X
+3151(between)X
+2 f
+3437(addr1)X
+1 f
+3650(and)X
+2 f
+3787(addr2.)X
+1 f
+4020(If)X
+4096(no)X
+4198(value)X
+914 4240(argument)N
+1245(is)X
+1328(specified,)X
+2 f
+1665(address)X
+1 f
+1943(initialises)X
+2277(a)X
+2 f
+2342(write-pointer.)X
+1 f
+2812(Subsequent)X
+3209(commands)X
+3584(of)X
+3681(the)X
+3807(form)X
+3992(`value')X
+4247(will)X
+914 4336(write)N
+1110(into)X
+1267(the)X
+1397(address)X
+1669(the)X
+1799(pointer)X
+2058(references,)X
+2438(advancing)X
+2798(the)X
+2928(write)X
+3124(pointer)X
+3383(by)X
+3497(the)X
+3628(appropriate)X
+4025(number)X
+4303(of)X
+914 4432(bytes.)N
+5 f
+626 4566(value)N
+1 f
+914(Once)X
+1103(the)X
+2 f
+1222(write-pointer)X
+1 f
+1664(has)X
+1793(been)X
+1966(initialised)X
+2302(by)X
+2405(a)X
+2463(command)X
+2800(of)X
+2890(the)X
+3010(form)X
+3189(`set)X
+3327(address',)X
+3636(commands)X
+4004(of)X
+4094(the)X
+4214(form)X
+914 4662(`value')N
+1168(will)X
+1318(write)X
+1508(the)X
+1632(value)X
+1831(to)X
+1920(memory)X
+2213(starting)X
+2479(at)X
+2563(the)X
+2687(specified)X
+3001(address,)X
+3287(advancing)X
+3641(the)X
+3765(write-pointer.)X
+4228(This)X
+914 4758(provides)N
+1209(a)X
+1264(rapid)X
+1448(mechanism)X
+1830(for)X
+1944(initialising)X
+2304(the)X
+2421(contents)X
+2706(of)X
+2793(a)X
+2848(block)X
+3045(of)X
+3132(memory.)X
+5 f
+626 4988(set)N
+818(register)X
+1250(value)X
+1 f
+914 5084(Set)N
+1036(the)X
+1154(contents)X
+1440(of)X
+1528(the)X
+1646(specified)X
+1954(machine)X
+2244(register)X
+2504(\(or)X
+2619(register)X
+2879(pair\))X
+3052(to)X
+3136(the)X
+3255(specified)X
+3564(value.)X
+3778(The)X
+3924(value)X
+4118(must)X
+4295(be)X
+914 5180(of)N
+1001(the)X
+1118(correct)X
+1359(length)X
+1578(to)X
+1660(fit)X
+1751(into)X
+1895(the)X
+2012(register)X
+2271(\(pair\).)X
+2489(The)X
+2633(available)X
+2939(register)X
+3198(names)X
+3421(are:)X
+2 f
+914 5276(A,A',F,F',B,B',C,C',D,D',E,E',H,H',L,L',I.)N
+1 f
+2331(\(8)X
+2418(bits\).)X
+2 f
+914 5372(AF,AF',BC,BC',DE,DE',HL,HL',IX,IY,PC,SP.)N
+1 f
+2434(\(16)X
+2561(bits\).)X
+5 f
+626 5506(RAM)N
+818(addr1)X
+1106(addr2)X
+1 f
+914 5602(Creates)N
+1178(an)X
+1280(area)X
+1439(of)X
+1533(RAM)X
+1740(including)X
+2068(addresses)X
+2 f
+2400(addr1)X
+1 f
+2618(and)X
+2 f
+2760(addr2.)X
+1 f
+2998(For)X
+3136(convenience)X
+3560(the)X
+3684(64K)X
+3848(address)X
+4114(space)X
+4317(is)X
+914 5698(subdivided)N
+1284(into)X
+1428(256)X
+1568(Byte)X
+1738(blocks.)X
+2006(The)X
+2150(area)X
+2302(of)X
+2389(RAM)X
+2589(created)X
+2838(therefore)X
+3146(will)X
+3289(be)X
+3384(a)X
+3439(multiple)X
+3724(of)X
+3811(256)X
+3951(bytes)X
+4139(long.)X
+5 f
+626 5832(ROM)N
+818(addr1)X
+1106(addr2)X
+1 f
+914 5928(Creates)N
+1177(an)X
+1277(area)X
+1434(of)X
+1526(ROM)X
+1731(including)X
+2057(addresses)X
+2 f
+2387(addr1)X
+1 f
+2603(and)X
+2 f
+2743(addr2.)X
+1 f
+2979(Unlike)X
+3220(RAM,)X
+3445(the)X
+3568(contents)X
+3859(of)X
+3952(ROM)X
+4158(cannot)X
+914 6024(be)N
+1011(changed)X
+1298(by)X
+1400(executing)X
+1731(machine)X
+2022(instructions,)X
+2436(however)X
+2732(they)X
+2891(can)X
+3023(be)X
+3120(changed)X
+3407(by)X
+3509(loading)X
+3769(an)X
+2 f
+3865(object)X
+4080(file)X
+1 f
+4202(or)X
+4290(by)X
+914 6120(using)N
+1107(the)X
+2 f
+1224(set)X
+1 f
+1332(command.)X
+338 6504(York)N
+522(Indy)X
+689(Edition)X
+4330(1)X
+
+1 p
+%%Page: 2 2
+np
+10 s 0 xH 0 xS
+1(Times-Roman)xf
+1 f
+338 384(em80)N
+528(\()X
+568(1)X
+621(\))X
+2204(\(LOCAL\))X
+4060(em80)X
+4250(\()X
+4290(1)X
+4343(\))X
+5(Courier)xf
+5 f
+626 768(load)N
+866(objfile)X
+1250(address)X
+1 f
+914 864(Load)N
+1098(the)X
+2(Times-Italic)xf
+2 f
+1215(program)X
+1514(text)X
+1 f
+1648(part)X
+1792(of)X
+1879(the)X
+1996(Z80)X
+2145(object)X
+2359(file)X
+2485(into)X
+2629(memory,)X
+2935(starting)X
+3194(at)X
+3271(the)X
+3388(specified)X
+3695(address.)X
+5 f
+626 998(mem)N
+818([addr1)X
+1154([addr2]])X
+1586([b|s|w])X
+1 f
+914 1094(Display)N
+1183(the)X
+1302(contents)X
+1589(of)X
+1678(memory.)X
+1986(The)X
+2132(display)X
+2384(runs)X
+2544(just)X
+2681(before)X
+2908(and)X
+3046(after)X
+3215(the)X
+3335(stack)X
+3521(pointer)X
+3770(if)X
+3842(no)X
+3945(addresses)X
+4273(are)X
+914 1190(given,)N
+1137(from)X
+2 f
+1319(addr1)X
+1 f
+1536(for)X
+1656(a)X
+1717(short)X
+1903(range)X
+2106(if)X
+2181(one)X
+2322(address)X
+2587(is)X
+2666(given,)X
+2889(or)X
+2982(between)X
+2 f
+3272(addr1)X
+1 f
+3489(and)X
+2 f
+3630(addr2)X
+1 f
+3847(if)X
+3921(two)X
+4065(addresses)X
+914 1286(are)N
+1034(given.)X
+1254(By)X
+1370(default)X
+1614(the)X
+1734(memory)X
+2023(contents)X
+2311(are)X
+2431(displayed)X
+2759(as)X
+2849(bytes.)X
+3061(If)X
+3139(the)X
+3260(optional)X
+3545(command)X
+3883(suffix)X
+2 f
+4094(s)X
+1 f
+4149(or)X
+2 f
+4240(w)X
+1 f
+4317(is)X
+914 1382(given,)N
+1131(the)X
+1248(memory)X
+1534(contents)X
+1819(will)X
+1962(be)X
+2057(displayed)X
+2382(as)X
+2 f
+2468(16)X
+1 f
+2568(or)X
+2 f
+2655(32)X
+1 f
+2755(bit)X
+2859(words)X
+3074(respectively,)X
+3498(in)X
+3580(little-endian)X
+3984(byte)X
+4141(order.)X
+5 f
+626 1516(dis)N
+818(addr1)X
+1106([addr2])X
+1 f
+914 1612 -0.3375(Disassemble)AN
+1342(memory)X
+1635(as)X
+1728(a)X
+1790(Z80)X
+1946(instruction)X
+2314(stream)X
+2553(between)X
+2844(the)X
+2968(specified)X
+3282(addresses,)X
+3634(or)X
+3728(running)X
+4004(from)X
+4188(addr1)X
+914 1708(for)N
+1028(a)X
+1083(short)X
+1263(distance)X
+1543(if)X
+1612(only)X
+1774(one)X
+1909(address)X
+2168(is)X
+2241(specified.)X
+5 f
+626 1842(step)N
+1 f
+914(Execute)X
+1190(a)X
+1245(single)X
+1455(instruction,)X
+1836(returning)X
+2149(control)X
+2395(immediately)X
+2812(to)X
+2894(the)X
+3011(command)X
+3345(line.)X
+5 f
+626 1976(run)N
+1 f
+914(Commence)X
+1306(CPU)X
+1490(execution.)X
+1849(Execution)X
+2202(will)X
+2355(be)X
+2460(terminated)X
+2830(when)X
+3033(the)X
+3161(program)X
+3463(hits)X
+3609(a)X
+2 f
+3675(break)X
+3887(point,)X
+1 f
+4102(accesses)X
+914 2072(memory)N
+1200(in)X
+1282(a)X
+2 f
+1337(watch)X
+1547(area,)X
+1 f
+1733(requests)X
+2014(data)X
+2166(from)X
+2342(an)X
+2 f
+2437(input)X
+2621(port,)X
+1 f
+2794(or)X
+2881(has)X
+3007(executed)X
+2 f
+3309(10,000)X
+3549(instructions.)X
+5 f
+626 2206(break)N
+914(address)X
+1 f
+914 2302(Sets)N
+1072(a)X
+1133(break)X
+1336(point)X
+1526(at)X
+1609(the)X
+1732(specified)X
+2045(address.)X
+2330(Just)X
+2480(before)X
+2710(the)X
+2833(CPU)X
+3013(executes)X
+3312(the)X
+3435(instruction)X
+3802(at)X
+3885(the)X
+4009(breakpoint,)X
+914 2398(control)N
+1160(will)X
+1303(be)X
+1398(returned)X
+1684(to)X
+1766(the)X
+1883(command)X
+2217(line.)X
+5 f
+626 2532(watch)N
+914(addr1)X
+1202([addr2])X
+1 f
+914 2628(Sets)N
+1068(a)X
+1125(watch)X
+1336(range)X
+1535(at)X
+2 f
+1614(addr1,)X
+1 f
+1847(or)X
+1936(spanning)X
+2 f
+2246(addr1)X
+1 f
+2459(and)X
+2 f
+2596(addr2.)X
+1 f
+2830(When)X
+3043(the)X
+3163(CPU)X
+3340(attempts)X
+3632(to)X
+3717(read)X
+3877(or)X
+3967(write)X
+4153(data)X
+4308(in)X
+914 2724(this)N
+1051(range)X
+1250(of)X
+1339(memory)X
+1627(addresses,)X
+1974(control)X
+2222(will)X
+2367(be)X
+2464(returned)X
+2751(to)X
+2834(the)X
+2952(command)X
+3287(line.)X
+3447(Instruction)X
+3814(fetches)X
+4060(as)X
+4147(well)X
+4304(as)X
+914 2820(other)N
+1098(accesses)X
+1386(are)X
+1503(trapped.)X
+5 f
+626 2954(clear)N
+914(break|watch)X
+1 f
+914 3050(Clear)N
+1106(either)X
+1307(all)X
+1406(breakpoints)X
+1798(or)X
+1885(all)X
+1984(watchpoints.)X
+5 f
+626 3184(show)N
+1 f
+914(Show)X
+1115(all)X
+1214(currently)X
+1522(set)X
+1630(breakpoints)X
+2022(and)X
+2157(watch)X
+2366(areas.)X
+5 f
+626 3318(int)N
+818([vector])X
+1 f
+914 3414(Raises)N
+1149(an)X
+1252(interrupt)X
+1555(on)X
+1663(the)X
+1788(specified)X
+2103(vector;)X
+2352(if)X
+2429(no)X
+2537(vector)X
+2764(is)X
+2845(specified,)X
+3180(the)X
+2 f
+3305(NMI)X
+1 f
+3479(vector)X
+2 f
+3706(0x0066)X
+1 f
+3969(is)X
+4051(used.)X
+4246(The)X
+914 3510(command)N
+1258(warns)X
+1478(if)X
+1557(a)X
+1622(maskable)X
+1951(interrupt)X
+2255(is)X
+2337(specified)X
+2653(that)X
+2801(the)X
+2927(CPU)X
+3110(is)X
+3192(unable)X
+3433(to)X
+3524(respond)X
+3806(to)X
+3897(because)X
+4177(of)X
+4273(the)X
+914 3606(status)N
+1115(of)X
+1202(the)X
+2 f
+1319(IFF)X
+1 f
+1464(CPU)X
+1638(flag.)X
+9 s
+3(Times-Bold)xf
+3 f
+338 3836(SEE)N
+492(ALSO)X
+10 s
+2 f
+626 3932(as80\(1\),)N
+911(Z80)X
+1055(Microprocessor)X
+1583(family)X
+1801(User's)X
+2033(Manual.)X
+9 s
+3 f
+338 4162(BUGS)N
+10 s
+1 f
+626 4258(None)N
+820(known.)X
+1079(The)X
+1226(application)X
+1602(has)X
+1731(not)X
+1856(been)X
+2029(tested)X
+2237(by)X
+2340(a)X
+2398(large)X
+2580(enough)X
+2838(set)X
+2949(of)X
+3039(users)X
+3226(to)X
+3311(be)X
+3409(confident)X
+3733(of)X
+3823(its)X
+3921(reliability)X
+4253(yet.)X
+626 4354(People)N
+862(willing)X
+1107(to)X
+1189(test)X
+1319(the)X
+1436(application)X
+1809(and)X
+1944(report)X
+2155(their)X
+2321(experience)X
+2685(are)X
+2802(welcome.)X
+9 s
+3 f
+338 4584 -0.3693(SHORTCOMINGS)AN
+10 s
+1 f
+626 4680(Currently)N
+952(there)X
+1131(is)X
+1204(no)X
+1305(way)X
+1458(of)X
+1546(storing)X
+1789(the)X
+1907(state)X
+2073(of)X
+2161(the)X
+2279(emulator)X
+2583(to)X
+2666(allow)X
+2863(a)X
+2919(user)X
+3073(to)X
+3156(run)X
+3284(a)X
+3340(session)X
+3591(over)X
+3754(more)X
+3939(than)X
+4097(one)X
+4233(exe-)X
+626 4776(cution)N
+845(of)X
+932(the)X
+1049(application.)X
+1442(If)X
+1516(this)X
+1651(is)X
+1724(required,)X
+2030(it)X
+2094(will)X
+2237(be)X
+2332(added.)X
+9 s
+3 f
+338 5006 -0.6667(CONTACT)AN
+10 s
+1 f
+626 5102(Please)N
+848(direct)X
+1049(any)X
+1184(comments)X
+1531(about)X
+1728(the)X
+2 f
+1845(em80)X
+1 f
+2037(application)X
+2410(to)X
+2492(the)X
+2609(author)X
+2 f
+2833(Don)X
+2990(Goodeve)X
+1 f
+3292(\(email)X
+3515(don@cs.york.ac.uk\).)X
+338 6432(York)N
+522(Indy)X
+689(Edition)X
+4330(2)X
+
+2 p
+%%Trailer
+xt
+
+xs

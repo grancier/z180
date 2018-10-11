@@ -1,0 +1,1193 @@
+	TITLE	Z-80 Resident Debugger (DEBUG.180)
+	SUBTTL	DEBUG Header
+	PAGE
+;=======================================================================;
+; Skeleton ROM-resident debugger. Adapted from ancient code (1978)
+;   D-X Designs Pty Ltd  December 1995   D. R. Brooks  
+;
+; Revision history:
+;	V1.00	Dec. 1995	Initial version
+;	V1.02	Mar. 1996	Added hooks to I/O functions
+;				Added display of current instruction
+;	V1.03	Apr. 1996	Added IN, OUT & BOOT Commands
+;	V1.04	May. 1996	Special extensible version for P112
+;	V1.05	Aug. 1996	Fixed bug in DECOUT routine
+;	V1.06	Feb. 1997	Fixed size report for 1 MB RAM
+;				Extra IO wait state at 24.576 MHz
+;=======================================================================;
+;   This is the generic core of the Z80/Z180 debug module. All hardware
+; dependent functions have been exported. These functions are called by
+; the following External declarations.
+
+			; Standard sign-on message & version
+BGNMG1:	DB	CR,'Z80 Series ROM-Resident Debugger V1.06: '
+	DB	'D-X Designs Pty Ltd  1997',CR,0
+ENDLIN:	DB	'Type "?" for help',CR,CR,0
+
+	SUBTTL	Basic IO Functions
+	PAGE
+;====== BASIC CHARACTER I/O FUNCTIONS ========================
+;   The fundamental functions are external, as they are hardware dependent.
+; The design enables CP/M calls 02 and 06 to serve, in a test environment.
+;  These external calls (getchr/putchr) should preserve registers.
+
+	;Queue-driver routines. Input is buffered to obviate
+	; overflow problems when loading hex. files into RAM
+
+ToQue:	PUSH	IX		; Push char. to input queue
+	PUSH	BC
+	LD	IX,qSpace
+	LD	B,A		; Save the char.
+	LD	A,(IX+QIPTR)
+	INC	A		; Check there is room
+	RES	QSBIT,A		; Increment modulo-N
+	CP	(IX+QOPTR)
+	JR	Z,Qout		; Jump if no room
+	LD	A,B
+	LD	C,(IX+QIPTR)
+	LD	B,0
+	INC	(IX+QIPTR)	; QIPTR++ (Modulo-N)
+	RES	QSBIT,(IX+QIPTR)
+	ADD	IX,BC		; Point into buffer
+	LD	(IX+QBUFF),A	; Save char.
+Qout:	POP	BC
+	POP	IX
+	RET
+
+FmQue:	PUSH	IX		; Pull char. from queue
+	PUSH	BC
+	LD	IX,qSpace
+	LD	A,(IX+QIPTR)	; Queue empty? 
+	SUB	(IX+QOPTR)	; ie QIPTR == QOPTR
+	JR	Z,Qout		; If so, return zero
+	LD	C,(IX+QOPTR)
+	LD	B,0
+	INC	(IX+QOPTR)	; QOPTR++ (Modulo-N)
+	RES	QSBIT,(IX+QOPTR)
+	ADD	IX,BC		; Point into buffer
+	LD	A,(IX+QBUFF)	; Pull the char.
+	AND	A
+	JR	Qout
+
+;--------------------------------------------------------------
+; Poll input for char., & queue it
+
+InPoll:	CALL	GetChr		; Next from input stream (if any)
+	AND	A
+	CALL	NZ,ToQue	; If any, push it to queue
+	RET
+
+; Input to (HL), until B=0 or CR
+
+Get:	LD	C,0		; Column count
+Gt1:	CALL	InPoll		; Put anything new on queue
+	CALL	FmQue		; Pull from tail
+	JR	Z,Gt1		; Wait for something
+	CP	ASCIBS
+	JR	NZ,Gt2
+	LD	A,C		; Backspace: =NOP at 1st. col.
+	AND	A
+	JR	Z,Gt1
+	LD	A,ASCIBS
+	CALL	PutChr 
+	LD	A,' '
+	CALL	PutChr		; Destructive BS: BS-SP-BS
+	LD	A,ASCIBS
+	CALL	PutChr 
+	DEC	C		; Back-up pointers:	col. count
+	DEC	HL		;			buffer ptr.
+	INC	B		;			counter
+	JR	Gt1
+
+Gt2:	CP	ASCIHT
+	JR	NZ,Gt3 
+Gt2b:	LD	A,' '
+	CALL	PutChr
+	LD	(HL),A		; TAB - fill out spaces
+	INC	HL
+	INC	C
+	DJNZ	Gt2a
+	RET			; Done if buffer full
+
+Gt2a:	LD	A,C
+	AND	7		; Tab-out to 8th column
+	JR	NZ,Gt2b
+	JR	Gt1
+
+Gt3:	CP	CR
+	JR	Z,Gt4		; CR - the only other legal control
+	CP	' '
+	JR	C,Gt1		; Ignore the others
+	CP	ASCDEL
+	JR	NC,Gt1
+	CP	'a'		; Force uppercase
+	JR	C,Gt4
+	SUB	'a'-'A'
+Gt4:	CALL	PutChri		; Echo the transformed char.
+	LD	(HL),A		; Accept it
+	INC	HL
+	INC	C
+	DEC	B		; Count up buffer
+	RET	Z
+	CP	CR
+	RET	Z		; Stop at CR
+	JR	Gt1		; Else, go for more
+
+;----------------------------------------------------------
+; Output until CR
+
+PCr:	LD	A,(HL)
+	CALL	PutChri		; Sent 1 (preserves A)
+	INC	HL
+	CP	CR		; Until CR
+	RET	Z
+	JR	PCr
+
+;----------------------------------------------------------
+; Output ASCIIZ String
+
+PutMsg:	LD	A,(HL)
+	INC	HL
+	AND	A
+	RET	Z		; Back at the end
+	CALL	PutChri		; Send 1
+	JR	PutMsg
+
+;----------------------------------------------------------
+; Output B Chars. from HL
+
+PutDis:	LD	A,(HL)
+	CALL	PutChri		; Sent 1
+	INC	HL
+	DJNZ	PutDis
+	RET
+
+;----------------------------------------------------------
+; Output 1 char. & Add LF to CR
+
+PutChri: CALL	PutChr
+	CP	CR
+	RET	NZ
+	LD	A,LF		; Add the LF
+	CALL	PutChr
+	LD	A,CR		; Don't alter A
+	RET
+
+	SUBTTL	General Utilities
+	PAGE
+; Register save/restore Functions.
+;.....
+;  Up 1 level (std. saves)
+
+UpLvl:	EX	(SP),HL	 
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	JP	(HL)		; "Return"
+
+;..... 
+; Down 1 level (std. restore)
+
+DnLvl:	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	EX	(SP),HL
+	RET
+
+;----------------------------------------------------------------
+;   Routine to format 16 bytes for display. It is suitable for
+; re-entrant use. On entry, HL holds addr of 1st byte for display,
+; DE points at output buffer. All main registers are destroyed.
+; A CR is placed after the last char. generated.
+
+BYTESLN	EQU	16		; No. of bytes displayed per line
+TXTCOL	EQU	54		; Locn. on line for text display
+TXTBGN	EQU	'>'		; Opening "quote" for text
+TXTEND	EQU	'<'		; Closing ditto
+
+Disply: PUSH	IX
+	PUSH	HL
+	PUSH	DE
+	POP	IX
+	LD	BC,TXTCOL
+	ADD	IX,BC		; IX -> char. display area on line
+	LD	(IX-1),TXTBGN
+	POP	HL
+
+	CALL	PutHL		; Post address
+	LD	B,BYTESLN
+
+Disp_1:	LD	A,(HL)
+	CALL	PutA		; Display in hex.
+	LD	A,(HL)
+	CP	' '		; Non-printing?
+	JR	C,Disp_2
+	CP	ASCDEL		; DEL does not print
+	JR	C,Disp_3
+Disp_2:	LD	A,'.'		; Non-printing substitute
+Disp_3:	LD	(IX),A
+	INC	HL
+	INC	IX
+	DJNZ	Disp_1		; Do the whole line
+	LD	(IX),TXTEND
+	LD	(IX+1),CR	; End of line
+	POP	IX
+	RET
+
+;----------------------------------------------------------------
+; Get to start of next blank-delimited field
+
+Crt:	CP	CR		; Not space, try CR
+	RET	Z
+	INC	HL		; Not CR either: skip it
+GetCh:	LD	A,(HL)		; Or accept it
+	CP	' '
+	JR	NZ,Crt
+PlBlk:	INC	HL		; Strip off blanks
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PlBlk
+	CP	CR
+	RET			; Back: Z indicates CR
+
+;----------------------------------------------------------------
+; Input a line to conbuf
+
+GetLin:	LD	HL,conBuf
+	LD	B,SZBUF-1
+	LD	(inPtr),HL	; Initialise pointer
+	PUSH	HL
+	LD	(HL),' '	; Ensure a space at start, for getch
+	INC	HL
+	CALL	Get
+	POP	HL		; Ptr. to start of conbuf
+	CALL	GetCh		; Return 1st. char. to user
+	RET
+
+;----------------------------------------------------------------
+; Post a Space at (DE)
+
+DSpac:	EX	DE,HL
+	LD	(HL),' '
+	INC	HL
+	EX	DE,HL
+	RET
+
+;------ Hexadecimal <-> Binary Conversions ----------------------
+;.....
+; Convert chars at (HL) to hex. no. in (DE)
+;  Destroys A, DE. Advances HL past no.
+
+GetNum:	CALL	GetCh
+GetN2:	LD	DE,0
+	EX	DE,HL
+	PUSH	BC		; Preserve it
+	LD	B,0		; Flag: nothing seen yet
+	PUSH	HL
+	ADD	HL,SP		; HL points at zero-ed workspace (on stack)
+DLp:	CALL	GetHex		; Convert 1 char. to hex.
+	JR	C,NotDig
+	SET	7,B		; Flag: something was seen
+	RLD			; Roll digit into number
+	INC	HL
+	RLD
+	DEC	HL
+	JR	DLp
+
+NotDig:	DEC	DE
+	LD	A,(DE)		; Get back terminal char.
+	POP	HL		; Scrap workspace
+	RL	B		; B[7] -> CY (set if something seen)
+	POP	BC		; Recovered BC
+	EX	DE,HL		; Exit: result in DE, ptr. in HL
+	RET			; Terminal char. in A
+
+;--------------------------------------------------------------
+
+GetHex:	CALL	InPoll
+	LD	A,(DE)		; Convert byte [DE] to hex.
+	INC	DE
+	SUB	'0'		; Return CY if bad
+	RET	C
+	CP	10
+	JR	C,Dig		; Digit 0-9
+	SUB	7		; Block special chars.
+	RET	C
+	CP	16
+	CCF
+	RET	C
+Dig:	AND	A		; Good: CY=0
+	RET
+
+;----------------------------------------------------------------
+; Convert 2 chars. to byte in A
+
+GetByt:	PUSH	BC		; Return CY if error
+	CALL	GetHex		; 1 byte
+	JR	C,BadB
+	ADD	A,A
+	ADD	A,A		; Shift left 4 places
+	ADD	A,A
+	ADD	A,A
+	LD	B,A		; Save it
+	CALL	GetHex		; 2nd. byte
+	JR	C,BadB
+	OR	B		; OK: form byte & CY=0
+BadB:	POP	BC
+	RET
+
+;----------------------------------------------------------------
+; Get a byte, & keep sumcheck in C
+
+GetSum:	CALL	GetByt		; Source ptr. in DE
+	PUSH	AF
+	ADD	A,C		; Sumcheck
+	LD	C,A
+	POP	AF
+	RET			; Back: CY=1 if error
+
+;----------------------------------------------------------------
+; Convert HL to 4 hex. chars. from (DE)
+
+PutHL:	LD	A,H
+	CALL	PutA
+	DEC	DE
+	LD	A,L
+PutA:	PUSH	AF		; Convert A to 2 hex. chars. at (DE)
+	RRA
+	RRA
+	RRA
+	RRA
+	CALL	Nibble		; Bits 4-7
+	POP	AF
+	CALL	Nibble		; Bits 0-3
+	LD	A,' '
+	LD	(DE),A		; Blank after
+	INC	DE
+	RET
+
+;----------------------------------------------------------------
+; Output A[3:0] as hex. char.
+
+Nibble:	OR	0F0H		; Top bits =1, flags H, N =0
+	DAA
+	ADD	A,0A0H
+	ADC	A,40H		; Convert to ASCII
+	LD	(DE),A
+	INC	DE
+	RET
+
+;----------------------------------------------------------------
+
+tenPwr:	DW	10000
+	DW	1000
+	DW	100
+	DW	10
+
+; Output HL in decimal - direct output
+
+DecOut:	PUSH	IX
+	PUSH	DE
+	PUSH	BC
+	LD	IX,tenPwr
+	LD	B,4
+	LD	C,'0'		; Leading-Zero Flag
+Dc2:	LD	E,(IX)
+	INC	IX		; Power of 10 in DE
+	LD	D,(IX)
+	INC	IX
+	LD	A,'0'-1
+	AND	A		; CY=0
+Dc1:	INC	A
+	SBC	HL,DE		; Trial subtraction
+	JR	NC,Dc1
+	ADD	HL,DE		; Restore
+	CP	C		; (leading) Zero?
+	JR	Z,Dc3
+
+	CALL	PutChr		; No, Display
+	LD	C,-1		;  Clear LZ Flag
+
+Dc3:	DJNZ	Dc2
+	LD	A,L		; Get the last bit
+	ADD	A,'0'
+	CALL	PutChr
+	POP	DE
+	POP	BC
+	POP	IX
+	RET
+
+;---------------------------------------------------------
+; Check the given address points into User Area
+
+UserArea:
+	PUSH	DE		; Save the address
+	PUSH	HL
+	BIT	7,D		; Can't be in ROM
+	JR	Z,UaErr
+
+	AND	A		; Dummy for now
+	JR	UaExit
+
+UaErr:	SCF			; Not allowed: set flag
+UaExit:	POP	HL
+	POP	DE
+	RET
+
+	SUBTTL	DEBUG mainline
+	PAGE
+;<<------------- Primary Entry Point ------------>>
+
+Debug:	LD	HL,dbDat	; Clear out workspace
+	LD	B,monTop-dbDat
+	XOR	A
+CLp0:	LD	(HL),A
+	INC	HL
+	DJNZ	CLp0
+	LD	SP,Stack	; Initialise SP
+	LD	HL,bgnMg1
+	CALL	PutMsg		; Sign-on message
+	LD	HL,hwMsg
+	CALL	PutMsg		; Indicate hardware variant
+	LD	HL,endLin	
+	CALL	PutMsg		; Final CR
+
+; Get & process next user command
+
+DbgLin:	LD	SP,Stack	; Forced reset
+	LD	HL,prompt
+	CALL	PutMsg		; Prompt first
+	CALL	GetLin		; Input response
+	JR	Z,DbgLin	; Skip null line
+	INC	HL
+	LD	(inPtr),HL	; Points after the command-code
+	LD	HL,comLis
+	LD	BC,NCOMS
+DbComd:	CPI			; Match command letter to table
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)		; Routine address in DE
+	INC	HL
+	JR	Z,ComOk
+	CALL	IntelErr	; Report any outstanding errors
+	JP	PE,DbComd
+
+	LD	HL,(inPtr)	; Try for external commands
+	DEC	HL		; Point HL at command code
+	CALL	ExCom
+	JR	NC,EndCom	; Done if OK (else flag error)
+
+InvCom:	LD	A,BADCOM
+CmdErr:	LD	HL,emTab	; List of error messages
+	LD	E,A		; Offset
+	LD	D,0
+	ADD	HL,DE
+	CALL	PCr		; Output the message (CR ends it)
+EndCom:	JR	DbgLin
+
+ComOk:	LD	HL,EndCom	; Push return-link for command processor
+	PUSH	HL
+	PUSH	DE		; Push address of processing routine
+	LD	HL,(inPtr)	; Point to 2nd. char. of command
+	RET			; Go to command routine
+
+;----------------------------------------------------------------
+prompt: DB	'=',0		; Standard DEBUG prompt
+
+comLis: DB	':'		; Table of DEBUG commands
+	DW	HexFormat	; This cmnd. must be first
+	DB	'B'
+	DW	Break
+	DB	'D'		; Key letter
+	DW	Display		; Routine pointer
+	DB	'G'
+	DW	GoGet
+	DB	'I'
+	DW	InPort
+	DB	'N'
+	DW	Next0
+	DB	'O'
+	DW	OutPort
+	DB	'R'
+	DW	Regs
+	DB	'?'
+	DW	ShowHelp
+NCOMS	  EQU  ($-comlis)/3	;No. of table entries
+
+			;DEBUG error messages
+emTab:
+BADCOM	  EQU  $-emTab
+	DB	'Invalid command code',CR
+BADNUM	  EQU  $-emTab
+mbDn:	DB	'Invalid hexadecimal digit',CR
+BADREG	  EQU  $-emTab
+	DB	'Invalid register name',CR
+INVBRK	  EQU  $-emTab
+	DB	'Cannot set breakpoint in this area',CR
+RUNROM	  EQU  $-emTab
+	DB	'Cannot single-step in this area',CR 
+NOCNGE	  EQU  $-emTab
+xAdr:	DB	'Cannot edit memory in this area',CR
+NOINTS	  EQU  $-emTab
+	DB	'Function requires interrupt hardware',CR
+BADCHK	  EQU  $-emTab
+xChk:	DB	'Bad checksum',CR
+NOPORT	  EQU  $-emTab
+	DB	'Required argument missing',CR
+
+	SUBTTL	Read Intel-hex. Format Data
+	PAGE
+
+iMsg:	DB	'Errors in Intel-hex file: last bad line: ',0
+iGap:	DB	'   ',0
+EMASK	  EQU  (1 SHL IFHEX) + (1 SHL IFADR) + (1 SHL IFSUM)
+
+; Log errors & reset indicators
+
+IntelErr:
+	CALL	UpLvl		; Save everything
+	LD	IX,sysFlg
+	LD	A,EMASK
+	AND	(IX)		; Any errors?
+	JR	Z,NoEr
+	LD	HL,iMsg
+	CALL	PutMsg		; Message stub
+	LD	HL,(errLin)
+	CALL	DecOut		; Line No. in decimal
+	LD	HL,iGap
+	CALL	PutMsg
+	BIT	IFHEX,(IX)
+	LD	HL,mbDn
+	CALL	NZ,PCr		; Bad hex. digit
+	RES	IFHEX,(IX)
+	BIT	IFADR,(IX)
+	LD	HL,xAdr
+	CALL	NZ,PCr		; Bad address
+	RES	IFADR,(IX)
+	BIT	IFSUM,(IX)
+	LD	HL,xChk
+	CALL	NZ,PCr		; Bad checksum
+	RES	IFSUM,(IX)
+NoEr:	LD	IX,0
+	LD	(hexLin),IX	; Reset hex-file line counter
+	LD	(errLin),IX	; Reset error-line ptr.
+	CALL	DnLvl		; Restore caller's regs.
+	RET
+
+; Read a line of Intel-hex. format
+
+HexFormat:
+	EX	DE,HL		; Buffer ptr. in DE
+	LD	IX,sysFlg
+	LD	HL,(hexLin)
+	INC	HL		; Bump line counter
+	LD	(hexLin),HL
+	LD	C,0		; Preset the checksum
+	CALL	GetSum
+	JR	C,BadHex
+	LD	B,A		; Data counter
+	CALL	GetSum
+	JR	C,BadHex
+	LD	H,A		; Address
+	CALL	GetSum
+	JR	C,BadHex
+	LD	L,A
+	CALL	GetSum
+	JR	C,BadHex
+	CP	0		; Record type
+	JR	Z,NBt		; Data
+	CP	1		; If the end,
+	CALL	Z,IntelErr	; ,report any outstanding errors
+	RET
+
+NBt:	AND	A		; Data: CY=0
+	PUSH	HL
+	PUSH	DE
+	LD	DE,dbDat	; Check address in range
+	SBC	HL,DE
+	POP	DE
+	POP	HL
+	JR	NC,BadAdr
+	CALL	GetSum		; Data byte
+	JR	C,BadHex
+	LD	(HL),A		; Place data
+	INC	HL
+	DJNZ	NBt		; All data bytes
+	CALL	GetSum
+	JR	C,BadHex	; Sumcheck
+	LD	A,C
+	AND	A
+	RET	Z		; OK: done
+	SET	IFSUM,(IX)	; Bad sumcheck
+	JR	IfEnd
+
+BadHex:	SET	IFHEX,(IX)	; Bad hex. digit
+	JR	IfEnd
+
+BadAdr:	SET	IFADR,(IX)	; Bad address
+IfEnd:	LD	HL,(hexLin)
+	LD	(errLin),HL	; Last failed line
+	RET			; Delay errors till end of file
+
+	SUBTTL	Help Command (list commands)
+	PAGE
+
+hlpMsg: DB	CR,'   C O M M A N D   H E L P',CR,CR
+	DB	'Separate fields by one or more blanks',CR,CR
+	DB	'Commands Available:',CR
+	DB	': <Intel hex.>    Input line of Intel hex-format data',CR
+	DB	'?                 Display this help',CR
+	DB	'B [addr [count]]  Set/clear breakpoint',CR
+	DB	'D addr [length]   Display/change memory',CR
+	DB	'G [addr]          Go run program (from addr)',CR
+	DB	'I port            Input & display byte from port',CR
+	DB	'N [count]         Run (next N) instructions',CR
+	DB	'O port data       Output data byte at port',CR
+	DB	'R [register name] Display/change user registers'
+endHlp:	DB	CR, 0
+
+ShowHelp:
+	LD	HL,hlpMsg
+	CALL	PutMsg		; Just display the message
+	LD	HL,0
+	CALL	ExCom	 	; Show any additional stuff
+	LD	HL,endHlp
+	CALL	PutMsg		; One extra line at end
+	RET
+
+	SUBTTL	In & Out Commands
+	PAGE
+; Read & write 1 byte from the IO space.  Port addresses are full 16 bits
+;.....
+; Read & display port contents
+
+InPort:	CALL	GetNum		; Port to read (even zero!)
+	PUSH	DE
+	POP	BC		; 16-bit port in BC
+	IN	A,(C)		; Read to A
+	LD	HL,conBuf
+	LD	B,6
+Ip1:	LD	(HL),' '
+	INC	HL
+	DJNZ	Ip1
+	EX	DE,HL		; Ptr. in DE
+	CALL	PutA
+	LD	A,CR
+	LD	(DE),A		; Terminator
+	LD	HL,conBuf	; Start of buffer
+	CALL	PCr		; Display
+	RET
+
+;.....
+; Write data to port
+
+OutPort: CALL	GetNum
+	LD	A,NOPORT
+	JP	NC,CmdErr	; Must give a port
+	PUSH	DE		; Port address
+	CALL	GetNum		; Data in E
+	POP	BC		; Port in BC
+	LD	A,NOPORT
+	JP	NC,CmdErr
+	OUT	(C),E		; That's all...
+	RET
+
+	SUBTTL	Register Display/Set Command
+	PAGE
+; This block is rather awful spaghetti: being original legacy code 
+; from 1978! "If it ain't broke, don't fix it."
+
+			; Bit-flags in Reg. C
+USEREG	EQU	0		; Accept this reg. for processing
+WRDREG	EQU	1		; This is a 16-bit reg.
+
+Regs:	LD	HL,conBuf
+	CALL	GetCh		; Command type?
+	CP	'R'
+	JP	NZ,DisAll
+	CALL	GetCh		; Z is set if end of line
+	JP	Z,DisAll	; If not 'R' + suffix, display all
+				; else display & set selectively
+	LD	D,(HL)		; 1st. char. of reg-name
+	INC	HL
+	LD	E,(HL)
+	LD	A,CR
+	CP	E		; No 2nd char?
+	JR	NZ,Rg1
+	LD	E,' '		; No, use space
+
+			; Now set-up for scan
+Rg1:	LD	BC,NREGS SHL 8	; Count & flags, 0-Display, 1/2-Byte
+	LD	IX,mHdr		; Text ptr.
+	LD	IY,regEnd	; Store ptr.
+
+Rg2:	LD	A,B		; Entry to process next register
+	CP	5		; 2-byte registers?
+	JR	NC,Rg2a
+	SET	WRDREG,C	; Yes
+	DEC	IY		; Step twice
+Rg2a:	LD	L,(IX+1)
+	LD	H,(IX)		; Reg-name (NB byte order!)
+	AND	A
+	SBC	HL,DE		; As input?
+	JR	NZ,Rg3
+	SET	USEREG,C	; Flag: use regs from here
+
+Rg3:	BIT	USEREG,C	; Bit stays set on subsequent passes
+	JP	Z,Rg4		; Skip display/set until matched
+	PUSH	IX
+	PUSH	IY		; Display/change this register
+	CALL	UpLvl		; Save environment while displaying
+Rg5a:	LD	DE,conBuf	; Here to re-display on error
+	PUSH	IX
+	POP	HL
+	LD	A,C
+	LD	BC,3
+	LDIR			; Register name + space
+	LD	C,A		; Restore C
+	BIT	WRDREG,C	; 1 or 2-byte?
+	JR	Z,Oneb
+	LD	L,(IY)
+	LD	H,(IY+1)
+	CALL	PutHL		; 2-byte
+	JR	Rg5
+
+Oneb:	LD	A,(IY)
+	CALL	PutA		; 1-byte
+Rg5:	CALL	OutBuf		; Output current value
+	LD	HL,conBuf
+	PUSH	HL
+	LD	(HL),' '	; Be sure there's a space at start
+	INC	HL
+	PUSH	BC		; Save flags in C
+	LD	B,SZBUF-1
+	CALL	Get		; Reply line
+	POP	BC
+	POP	HL
+	CALL	Getch		; Test reply
+	JR	Z,Rg6		; Null: next reg.
+	CP	'Q'
+	JR	NZ,Rg7
+	CALL	DnLvl		; "Q" - Quit
+	POP	IY
+	POP	IX		; Balance stack
+	XOR	A
+	RET			; Done
+
+Rg7:	CALL	GetN2		; Form new value in DE
+	CP	CR		; Must be valid
+	JR	Z,Rg8
+	LD	HL,mbDn
+	CALL	PCr
+	JR	Rg5a
+
+Rg8:	PUSH	DE
+	POP	IX		; Save result
+	CALL	DnLvl
+	POP	IY
+	EX	(SP),IX		; Restore IX
+	POP	HL		; New value in HL, other regs. restored
+	LD	(IY),L
+	BIT	WRDREG,C
+	JR	Z,Rg4
+	LD	(IY+1),H	; MSB if 2-byte
+
+; Now, Wind-up Pointers
+
+Rg4:	DEC	IY
+	INC	IX
+	INC	IX
+	INC	IX		; Next register name
+	DJNZ	Rg2b		; To a "JP", as rg2 is too far away
+	XOR	A
+	BIT	USEREG,C	; Did we process a register?
+	RET	NZ		; OK if match succeeded
+	LD	A,BADREG
+	JP	CmdErr		; Or error
+
+Rg2b:	JP	Rg2
+
+Rg6:	CALL	DnLvl		; Skip this register
+	POP	IY
+	POP	IX
+	JR	Rg4		; Then do next
+
+;----------------------------------------------------------------
+mHdr:	DB	"A  F  B  C  D  E  H  L  A' F' B' C' D' E' H' L' "
+SZMHDR	  EQU  $-mHdr
+	DB	"IX IY PC SP "	; MUST follow immediately after mhdr
+hTail:	DB	"<Instr.>"
+LHT	  EQU  $-hTail
+NREGS	EQU	20		; Total no. of registers
+
+; Display all Registers
+
+DisAll:	LD	HL,mHdr
+	LD	DE,conBuf	; First, build header
+	LD	BC,SZMHDR
+	LDIR			; Names of 1-byte regs.
+	LD	A,4		; Count of 2-byte regs.
+Ds1:	CALL	DSpac
+	LD	C,3
+	LDIR			; 2-byte reg. name
+	CALL	DSpac		;  & 2 extra spaces
+	DEC	A
+	JR	NZ,Ds1
+
+	LD	HL,hTail
+	LD	BC,LHT
+	LDIR			; Final part of legend
+
+	LD	A,CR
+	LD	(DE),A		; End of Line-1
+	LD	HL,conBuf
+	CALL	PCr		; Output 1st. line
+
+	LD	DE,conBuf	; Restart output buffer
+	LD	IX,regEnd	; Do 1-byte values
+	LD	B,SZMHDR/3
+Ds2:	LD	A,(IX)
+	CALL	PutA
+	DEC	IX
+	DJNZ	Ds2
+
+	LD	B,4		; & 2-byte values
+Ds3:	LD	H,(IX)
+	LD	L,(IX-1)
+	CALL	PutHL
+	DEC	IX
+	DEC	IX
+	DJNZ	Ds3
+
+	LD	IX,(PC_)	; Display part of instr.
+	LD	B,3
+Ds4:	LD	A,(IX)
+	INC	IX
+	CALL	PutA
+	DJNZ	Ds4
+
+	LD	A,CR
+	LD	(DE),A		; Final CR
+	INC	DE
+	LD	(DE),A		; Double-line after
+	INC	DE
+OutBuf:	LD	HL,conBuf	; Output message: don't alter C
+	EX	DE,HL
+	AND	A
+	SBC	HL,DE
+	EX	DE,HL		; Addr. in HL
+	LD	B,E		; Length in B
+	CALL	PutDis
+	XOR	A
+	RET			; Return, successful
+
+	SUBTTL	Display/Set Memory Command
+	PAGE
+; Display Memory Command
+
+Display: CALL	GetNum		; Get starting address
+	PUSH	DE		;  Save it
+	CALL	GetNum		;  Get length (if any)
+	LD	A,D
+	OR	E		; If zero, display/test 1 only
+	JR	Z,Dp1
+
+	PUSH	DE
+	LD	HL,0
+	ADD	HL,SP		; HL points at DE on stack
+	RLD			; Roll-up LSB, don't care bits in 0-3
+	INC	HL
+	RLD			; Rolled up 4 bits, so that
+	POP	BC		;  [DE]/16 now in B, modulo-4095
+	LD	A,C		; LS 4 original bits in C[4-7]
+	AND	0F0H		;  ie remainder modulo-16
+	JR	Z,Dp5		; If non-zero, round up no. of lines
+	INC	B
+Dp5:	POP	HL		; Start addr in HL, no. of lines in B
+
+Dp2:	LD	DE,conBuf
+	PUSH	BC
+	CALL	Disply		; Format 1 line for output
+	PUSH	HL		; Save address
+	LD	HL,conBuf
+	CALL	PCr		; Send line
+	POP	HL
+	POP	BC
+	DJNZ	Dp2		; All lines
+	RET			; Then done
+
+Dp3:	LD	(DE),A		; Place data
+Dp4:	INC	DE		; Next locn.
+	PUSH	DE
+Dp1:	POP	DE
+	PUSH	DE		; Copy addr.into DE
+	CALL	UserArea	; OK to edit this area?
+	LD	A,NOCNGE
+	JP	C,CmdErr	; No...
+
+	POP	HL		; Display/update 1 byte
+	LD	DE,conBuf
+	PUSH	HL
+	CALL	Disply		; Build address & data
+	LD	HL,conBuf
+	LD	B,8
+	CALL	PutDis		; Send data & await reply
+	CALL	GetLin		; Get any reply
+	POP	DE		; Save address in DE
+	JR	Z,Dp4		; Null - display next
+	CP	'Q'
+	RET	Z		; Quit
+	PUSH	DE
+	CALL	GetN2		; Get substitute value
+	CP	CR		; Which must end with CR
+	LD	A,E		; Substitute byte
+	POP	DE		; Balance the stack
+	JR	Z,Dp3
+	LD	A,BADNUM
+	JP	CmdErr		; Error in reply
+
+	SUBTTL	Set Breakpoint Command
+	PAGE
+
+BRKINS	EQU	0FFH	;; RST 38H
+EINST	EQU	0FBH	;; EI
+
+;;	.z80			;Normal assembly mode
+
+; Set-Break Command
+
+Break:	LD	HL,(bpAdr)	;Addr. of any existing breakpoint
+	LD	A,H
+	OR	L		;Any set?
+	JR	Z,Bk1
+	LD	A,(inSt)	;Re-instate any displaced instr.
+	LD	(HL),A
+	LD	HL,0
+	LD	(bpAdr),HL	;Now, no breakpoint set
+Bk1:	LD	HL,(inPtr)
+	CALL	GetNum		; Get new break address
+	LD	A,D
+	OR	E
+	RET	Z		; If zero, no new break
+	CALL	UserArea	; Else, may not be in privileged area
+	LD	A,invBrk
+	JP	C,CmdErr
+
+	PUSH	DE		; Save BP address
+	CALL	GetNum		; Breakpoint count, or zero, in DE
+	LD	A,D
+	OR	E
+	LD	A,1		; Default
+	JR	Z,OneBk
+	CALL	GetVect		; To use a count, we need interrupts
+	LD	A,NOINTS	;  If Z, no interrupts available
+	JP	Z,CmdErr	; So this command fails
+	LD	A,E
+OneBk:	LD	(bpCnt),A	; Set the count
+
+	POP	HL		; BP addr. in HL
+	LD	A,(HL)
+	LD	(inSt),A	; Save the displaced instr.
+	LD	(HL),BRKINS	; Set new breakpoint
+	LD	(bpAdr),HL
+	RET
+
+	SUBTTL	User/Debug Environment Transfers
+	PAGE
+;		USER ENVIRONMENT
+; The following code administers transfer from DEBUG to User Environment,
+;  which implies reloading all the user's register values.
+;  A utility routine will reload these registers, execute a single (user)
+; instruction, then escape (via a CTC interrupt), and switch back to the
+; DEBUG environment. Repeated calls to this routine will hence step
+; through the user's program.
+;  An alternate entry point will restore the user-environment, without
+; arming the CTC interrupt, and hence allows the user to run free.
+
+;  Breakpoints transfer from the user to this package, which switches to 
+; the DEBUG environment, and displays appropriate messages.
+;  Two types of breakpoint exist, viz.
+;  1. An executed 0FFH (RST 38H) instruction, which is the type set by the
+;	 BREAK command in DEBUG.
+;  2. Single-stepping over instructions, which is done by setting a CTC
+;	 channel to interrupt after the user instruction. This function
+;	 requires suitable external hardware & CTC drivers.
+;.....
+; Entry to run 1 instruction, & regain control
+
+Run1:	LD	DE,(PC_)
+	CALL	UserArea	; Check we're not in privileged area
+	LD	A,RUNROM
+	JP	C,CmdErr
+
+	EX	DE,HL		; User-PC in HL
+	LD	BC,(bpAdr)	; Running from the set breakpoint?
+	AND	A
+	SBC	HL,BC
+	JR	NZ,Claims
+	LD	HL,sysFlg
+	SET	ATBRK,(HL)	; Note the fact, for later
+	LD	A,(inSt)
+	LD	(BC),A		; Replace the real instr.
+
+Claims: LD	HL,(PC_)
+	DEC	HL		; Locn. before the live instr.
+	LD	A,(HL)
+	LD	(eiOpc),A	; Save that byte
+	LD	(HL),einSt	; Replace it with EI
+	LD	(PC_),HL	; This is the locn. we shall run from
+	LD	(eiAdr),HL	; It is also the locn. of the EI
+	CALL	GetVect		; Vector address
+	LD	DE,rEntry
+	LD	(HL),E		; Set up vector
+	INC	HL
+	LD	(HL),D
+	CALL	ArmCTC		; Set up for 1 interrupt after
+
+; Entry to run the user, without regaining control
+
+RunFree: LD	(spVa),SP	; Save DEBUG-level SP
+	LD	SP,IY_
+	POP	IY		; Get back user registers
+	POP	IX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF		; Alternate regs.
+	EX	AF,AF'
+	EXX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF		; Main registers
+	LD	SP,(SP_)	; User's SP
+	PUSH	HL
+	LD	HL,(PC_)	; User's PC
+	EX	(SP),HL		; Now on user's stack
+	RET			; Despatch to user: INTERRUPTS DISABLED
+
+;---------------------------------------------------------------------
+; Routine to switch to DEBUG environment
+;  Enter with return-link on (user) stack, & user-link below it
+
+DbgEnv:	LD	(IY_),IY
+	POP	IY		; Link into dbgenv in IY
+	LD	(IX_),IX
+	POP	IX		; User link in IX
+	LD	(PC_),IX
+	LD	(SP_),SP
+	DI			; Don't interrupt: SP is invalid
+	LD	SP,AF_+2
+	PUSH	AF		; Save main registers
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	EX	AF,AF'		; Save alternate registers
+	EXX
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	JP	(IY)		; Exit via 1st-level link
+
+;------------------------------------------------------------------
+; CTC will interrupt to here, 1 instr. later
+
+REntry:	CALL	DbgEnv		; Switch back to DEBUG environment
+	LD	SP,(spVa)	; SP for call into run1
+	CALL	StopCTC		; Cancel the interrupt
+	LD	HL,(eiAdr)
+	LD	A,(eiOpc)
+	LD	(HL),A		; Restore the instr. displaced by EI
+	LD	HL,sysFlg
+	BIT	ATBRK,(HL)	; Test & reset the at-breakpoint flag
+	RES	ATBRK,(HL)
+	RET	Z		; If not at breakpoint, all done
+	LD	HL,(bpAdr)
+	LD	(HL),BRKINS	; Re-instate the break-instruction also
+	RET
+
+;----------------------------------------------------------------
+bkMs:	DB	"Break at "
+LBKMS	  EQU  $-bkMs
+
+Rst38:			; RST 38H despatches here
+	CALL	DbGEnv		; To DEBUG environment
+	LD	SP,Stack	; Initialise DEBUG stack
+	EI
+
+	LD	HL,(PC_)	; From the real breakpoint?
+	DEC	HL
+	LD	DE,(bpAdr)
+	EX	DE,HL
+	AND	A
+	SBC	HL,DE
+	LD	HL,bpCnt
+	JR	NZ,BkMsg
+	LD	(PC_),DE	; Yes, back up
+	DEC	(HL)		; Count occurrences
+	JR	NZ,RunAgn
+
+BkMsg:	LD	DE,conBuf	; Display message
+	LD	(HL),1		; Default counter in case a repeat
+	LD	HL,bkMs
+	LD	BC,lbkMs
+	LDIR
+	LD	HL,(PC_)	; Locn. of breakpoint
+	CALL	PutHL		; Build the message
+	EX	DE,HL
+	LD	(HL),CR
+	LD	HL,conBuf
+	CALL	PCr
+	JP	EndCom		; Go & input a command
+
+	SUBTTL	GO Command (run program)
+	PAGE
+
+GoGet:	LD	HL,(inPtr)
+	CALL	GetNum		; Get address (if any)
+	LD	A,D
+	OR	E		; If zero, use current PC
+	JR	NZ,Gg2
+	LD	DE,(PC_)	; DE = address to run from
+
+Gg2:	LD	HL,(bpAdr)	; Run from live breakpoint?
+	AND	A
+	SBC	HL,DE
+	JR	NZ,NewPt
+	CALL	GetVect		; Yes: this requires hardware support
+	LD	A,NOINTS
+	JP	Z,CmdErr	; and we don't have it
+	LD	(PC_),DE	; OK to run
+RunAgn:	CALL	Run1		; Run once, then replace breakpoint
+	JR	RUNS
+
+NewPt:	ld	(PC_),DE	; Set new PC
+Runs:	DI
+	JP	RunFree		; and run it
+
+	SUBTTL	NEXT Command
+	PAGE
+
+Next0:	CALL	GetVect		; This command requires hardware support
+	LD	A,NOINTS
+	JP	Z,CmdErr	; and we don't have it
+	LD	HL,(inPtr)
+	CALL	GetNum		; Get count (if any)
+	LD	A,D
+	OR	E
+	LD	A,E
+	JR	NZ,Nx1
+	LD	A,1		; Default =1
+Nx1:	LD	(nxCnt),A	; Set count
+
+OneRun:	CALL	Run1		; Run a single instruction
+	CALL	Regs		; Display registers, if provided
+	LD	HL,nxCnt
+	DEC	(HL)		; Count steps
+	JR	NZ,OneRun
+	RET			; End of count: next command
+
+	END
+

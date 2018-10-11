@@ -1,0 +1,296 @@
+	SUBTTL	SCSI Drive Routines (SCSI.180)
+	PAGE
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;	     S C S I    S u p p o r t    R o u t i n e s
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Reset the SCSI Controller and check for its presence
+; Enter: None
+; Exit : A = 0, Zero Set if 5380 Controller Present, Else Non-Zero value
+; Uses : AF,BC
+
+CkSCSI:	LD	A,80H
+	OUT0	(NCRCMD),A	; Reset Controller
+	LD	BC,0
+Dly00:	DJNZ	Dly00		; Pause
+	DEC	C		;  a
+	JR	NZ,Dly00	;   short while
+	XOR	A
+	OUT0	(NCRCMD),A	;  then remove Reset Bit
+	IN0	A,(NCRINT)	;   clear Interrupts
+	XOR	A
+	OUT0	(NCRMOD),A	; Initialize Regs
+	OUT0	(NCRTGT),A
+	OUT0	(NCRBUS),A
+	IN0	A,(NCRMOD)	; Get Mode Reg
+	LD	(SCSIOk),A	;   save Flag (0=Present / Non-0=None)
+	OR	A		; Found (0=Yes)?
+	RET
+
+;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;		B O O T    f r o m    S C S I
+;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+BtSCSI:	LD	HL,HDCOMD+1	; Address SCSI Comnd Block
+	XOR	A		;  Get a Zero
+	LD	(HL),A		; Clear LUN, Hi-Addr
+	INC	HL
+	LD	(HL),A		;  Mid-Addr
+	INC	HL
+	LD	(HL),A		;   Lo-Addr for Block # 0
+	LD	HL,8000H	; Load Boot Sector here
+	CALL	HdRead		; Attempt Read
+	RET	NZ		; ..quit if Bad
+
+	LD	HL,(8000H)	; Get first two bytes of Image
+	LD	A,L		; Validate Image as bootable
+	CP	76H		; Valid?
+	RET	NZ		; ..quit NZ if Not
+	LD	A,H
+	CP	21H		; Next Byte valid?
+	RET	NZ		; ..quit NZ if Not
+
+;--------------------------------------------------------------------
+; ROMv5.0 Mods                                                   TAG
+; Bypass the normal load-at-execution address and load at 8100H.
+; Instead of loading 22 sectors, load 32.  The B/P BIOS sets 2 system
+; tracks for SCSI and emulates 16 SPT, so load two tracks worth of
+; data.
+;	LD	HL,(8002H)	; Else Get Initial Load Point
+;	LD	B,22		; 22 Sectors (11k) In Max Size Boot Image
+	ld	hl,8100h	; Load here instead
+	ld	b,32		;   Set # of Sectors to load
+; End of mods
+;--------------------------------------------------------------------
+
+; Loop here to read all sectors into position in memory
+
+BtSCSL:	PUSH	BC		; Save Loop Counter
+	CALL	HdRead		;   and Try to Load the Sector
+	POP	BC		;    restore Counter
+	RET	NZ		; ..quit NZ if Error Reading
+	LD	HL,HDCOMD+3	; Pt to Block Addr (Lo)
+	INC	(HL)		;  advance to next Block #
+	LD	HL,(HDBUFR)	;   Get previous Load Addr
+	LD	DE,512
+	ADD	HL,DE		;    advance to next Load Pt
+	DJNZ	BtSCSL		; ..loop til all done
+
+	JP	BootV0		; Copy Clock RAM & Execute OS
+				;  (from common DISKOP code)
+;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+; Read one Block (512 bytes) to Address in HL.
+;  Assumes Comnand Descriptor Block # and LUN already set
+
+HdRead:	LD	A,08H		; Set the SCSI Read Command
+	LD	(HDCOMD),A	;  save command in CDB
+	LD	(HDBUFR),HL	;   and Load Pt Addr
+	LD	HL,1
+	LD	(HDSIZ),HL	; Load 1 Block
+
+; Try the Command specified.  If errors returned (e.g. Attn assertion),
+;  read the SCSI Sense status and try the command again.
+
+	CALL	HDRW0		; Try a Normal Data Access
+	RET	Z		; ..exitting if Ok
+	LD	HL,SENSE	; Set Ptr to Sense Command Block
+	LD	DE,SNSDAT	;  and Sense Data Poiner
+	CALL	HDRW1		; Try a Sense Read, following thru to Dat Rd
+HDRW0:	LD	DE,(HDBUFR)	;  and Data Pointer for Normal Accesses
+	LD	HL,HDCOMD	; Set Command Block Address
+HDRW1:	LD	(HDCMDV),HL	; Save Command Block Address
+	LD	(HDDATV),DE	;   and Data Area Pointer
+	CALL	SCSI		; Do the Work
+	AND	00000010B	; Any errors?
+	RET
+
+;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+; Raw SCSI Driver
+
+SCSI:	LD	(DATPTR),DE	; Save Pointer to Data Area
+	XOR	A
+	OUT0	(NCRCMD),A	; Clear any previous Controller status
+	OUT0	(NCRMOD),A	;  no Mode settings
+	OUT0	(NCRTGT),A	;   nothing asserted
+	DEC	A		; 0 --> FF
+	LD	(STATUS),A	; Set Initial timeout status
+	IN0	A,(NCRINT)	;  Clear interrupts & Error Bits
+
+	LD	A,10000001B	; Target Device (0) & Host initiator (7) bits
+	OUT0	(NCRDAT),A
+	IN0	A,(NCRCMD)	; Get Initiator Comnd Reg
+	OR	B_ABUS		;  Assert the Data Bus
+	OUT0	(NCRCMD),A
+	LD	A,B_ASEL+B_ABUS	; Now Assert both Select and Data Bus bits
+	OUT0	(NCRCMD),A
+
+; Wait for Target to become Busy.  The SCSI spec says 250 mS, but we don't
+; have a timer yet, so use an arbitrary counter to set a limit.
+
+	LD	L,0FFH		; Preset Timeout Error Status
+	LD	BC,40000	;  (arbitrary limit counter)
+
+BSYWT:	DEC	BC		; Countdown
+	LD	A,B
+	OR	C		; Have we timed out?
+	JR	Z,TIMOUT	; ..exit to Error if So
+	IN0	A,(NCRBUS)	; Get the Current Bus Status
+	AND	B_BSY		; Is it BSY?
+	JR	Z,BSYWT		; ..loop if Not
+			;..else fall thru..
+	LD	A,B_ABUS
+	OUT0	(NCRCMD),A	; Assert Bus w/o Select Command (or free)
+	XOR	A		;  get a Zero
+	OUT0	(NCRCMD),A	;   then free the Data Bus
+	LD	(HDONE),A	; Start by showing Not Done
+			; Wait for a Request on the SCSI bus
+RQWAIT:	IN0	A,(NCRBUS)	; Get Bus status
+	AND	B_REQ		; Bus Request yet?
+	JR	Z,RQWAIT	; ..jump if Not and wait
+
+WtCall:	CALL	NZ,SCSINT	; Call the Interrupt to start transfer
+	LD	A,(HDONE)	; Get Hard Drive Done flag
+	OR	A		; Finished?
+	JR	NZ,WtDonX	; ..exit if So
+	IN0	A,(DRA)		; Else fetch Status (from Z182 Port A)
+	BIT	4,A		; Interrupt?
+	JR	WtCall		; ..check & Read/Write SCSI if So
+
+WtDonX:	LD	HL,(STATUS)	; Else get Status and Message bytes
+TIMOUT:	LD	A,L		;  get Status Byte
+	OR	A		;   set flags
+	RET			;    and return
+
+;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+; SCSINT - "Interrupt" routine for the NCR 5380/DP 8490 chip.
+;
+; This routine handles Interrupts generated by the SCSI controller on phase
+; changes or loss of BSY signal meaning that the operation is complete.
+;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+SCSINT:	DI			; ..disable interrupts here for local calls
+	XOR	A
+	OUT0	(NCRCMD),A	; Release the SCSI Bus
+	IN0	A,(NCRST)	; Get status
+	AND	B_BBSY+B_PHAS	; Phase Match or Bus Busy?
+	JR	Z,SCSIN0	; ..jump if Not to continue
+			;..else fall thru to Exit..
+; Exit here when we are done to set the Completed flag
+
+DISCSI:	XOR	A		; Turn off any SCSI operations
+	OUT0	(NCRMOD),A
+	OUT0	(NCRTGT),A
+	DEC	A		; 0 --> FF
+	LD	(HDONE),A	; Indicate Hard Disk Operation Complete
+	IN0	A,(NCRINT)	; Discard any pending 5380 Interrupts
+	IN0	A,(DSTAT)
+	AND	5FH		; Disable DMA1 Interrupts
+	OUT0	(DSTAT),A
+	RET
+
+; Continue with Transaction
+
+SCSIN0:	XOR	A
+	OUT0	(NCRMOD),A	; Clear DMA mode
+	IN0	A,(NCRINT)	; Clear SCSI Interrupts
+	IN0	A,(DSTAT)
+	AND	5FH		;   and Stop Z-180 DMA Ch #1
+	OUT0	(DSTAT),A
+	LD	A,B_MBSY+B_DMA	; Monitor Busy and Set DMA Mode
+	OUT0	(NCRMOD),A
+;.....
+; Come here when phases change (Main Handler for Polled IO Mode)
+
+PHASE:	IN0	A,(NCRBUS)	; Read the Bus Status
+	AND	B_MSG+B_CD+B_IO	;  keep the three phases we are interested in
+	RRCA			; Rotate Phase status bits
+	RRCA			;   into B0-2 position for testing
+	OUT0	(NCRTGT),A	; Check for phase match
+	LD	HL,MESSAGE	;  (Ph 7 input goes here)
+	CP	7		; Are we in Phase 7 ?
+	JR	Z,HDIN		; ..jump if so to Message In Phase
+	LD	HL,(HDDATV)	;  (Ph 0/1 IO From/To here)
+	OR	A		; Are we in Phase 0 ?
+	JR	Z,HDOUT		; ..jump to if so to Data Out Phase
+	DEC	A		; Are we in Phase 1 ?
+	JR	Z,HDIN		; ..jump to if so to Data In Phase
+	LD	HL,(HDCMDV)	;  (Ph 2 output from here)
+	DEC	A		; Are we in Phase 2 ?
+	JR	Z,HDOUT		; ..jump to if so to Command Out Phase
+	LD	HL,STATUS	;  (Ph 3 Input to here)
+	DEC	A		; Are we in Phase 3 ?
+	JR	Z,HDIN		; ..jump to if so to Status In Phase
+			;..else fall thru
+; Phases 4, 5 and 6 wind up here in an Error
+
+	LD	HL,phMsg	; Print Message
+	CALL	PutMsg
+	CALL	DISCSI		; Disable any ongoing DMA/SCSI operation
+	OR	0FFH		; Set Error/Non-Zero Flag
+	LD	(HDONE),A	;  signal Done
+	LD	(STATUS),A	;   and Error Status
+	RET
+
+phMsg:	DEFB	CR,' ++Phase Err',CR,0
+
+;.....
+; SCSI Input routine
+; Enter: HL = Address of Receive Buffer start
+
+HDIN:	LD	C,1010B		; Set for Edge Triggering and Read mode
+	CALL	STDMA		;  Set up Transfer and DMA Data
+	OUT0	(NCRINT),A	;   Start DMA Initiator Rcv (bits don't care)
+	EI			; Interrupts Ok Now
+	RET
+
+;.....
+; SCSI Output Routine
+; Enter: HL = Address of Send Buffer start
+
+HDOUT:	LD	C,1000B		; Set for Edge Triggering bit and Write mode
+	CALL	STDMA		;  Set up Transfer and DMA Data
+	LD	A,B_ABUS	;   Assert the Data Bus
+	OUT0	(NCRCMD),A
+	OUT0	(NCRST),A	;    Start DMA Send (bits irrelevant)
+	EI			; Interrupts Ok Now
+	RET
+
+;.....
+; STDMA - Set up DMA Channel 1 for a SCSI Read or Write operation.
+; Enter: HL = Start Address of Buffer to Read/Write from/to
+;	  C = Write (1x00B) or Read (1x10B) DMA1 Control bits
+;		     ||++- Mem->IO   ||++- IO->Mem
+;		     |+--- DMA0-Sns  |+--- DMA0-Sns
+;		     +---- DMA1-Edge +---- DMA1-Edge
+
+STDMA:	IN0	A,(DCNTL)	; Get DMA1 Control bits
+	AND	0F4H		;  mask pertinent bits assuming a Write
+	OR	C		; Add Edge Triggering bit and R/W mode
+	OUT0	(DCNTL),A	;   and Command DMA Chan 1
+
+	CALL	AbsAddr		; Compute 20-bit Address for Load
+	OUT0	(MAR1B),A
+	OUT0	(MAR1L),L
+	OUT0	(MAR1H),H	;  Set DMA for Memory Addr
+	LD	A,DMAACK
+	OUT0	(IAR1L),A	;   Set DMA IO Port #
+	XOR	A
+	OUT0	(IAR1H),A	;    (in 16-bit form)
+	OUT0	(IAR1H+1),A	;     (insurance)
+	OUT0	(BCR1L),A	;    Length (lo)
+	LD	A,4
+	OUT0	(BCR1H),A	;     Length (hi) + slop
+
+	IN0	A,(DSTAT)	; Get DMA Chan 1 Status
+	AND	57H		;  set for No Terminating Interrupt
+	OR	81H		;   enable DMA operation
+	OUT0	(DSTAT),A	;    and Start the action!
+	RET
+
+;.....
+; SCSI Read Sense Command Data Block
+
+SENSE:	DEFB	03H		; SCSI Sense Command
+	DEFB	00,00,00,04,00	;   remainder of Sense Command Block
+
+;- - - - - - - - - -  End of SCSI.180  - - - - - - - - - - -
+

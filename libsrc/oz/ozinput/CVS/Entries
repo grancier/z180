@@ -1,0 +1,13 @@
+/Makefile/1.6/Tue Jun  3 02:03:46 2014//
+/ozclick.asm/1.3/Tue Jun 28 03:01:03 2016//
+/ozgetch.asm/1.3/Tue Jun 28 03:01:03 2016//
+/ozkbdoff.asm/1.3/Tue Jun 28 03:01:03 2016//
+/ozkbdon.asm/1.3/Tue Jun 28 03:01:03 2016//
+/ozkeyclear.asm/1.3/Tue Jun 28 03:01:03 2016//
+/ozkeyhit.asm/1.4/Tue Jun 28 03:01:03 2016//
+/ozkeylower.asm/1.4/Tue Jun 28 03:01:03 2016//
+/ozkeyupper.asm/1.4/Tue Jun 28 03:01:03 2016//
+/ozungetch.asm/1.3/Tue Jun 28 03:01:03 2016//
+/ozeditline.c/1.3/Thu Jul  7 07:25:18 2016//
+/.cvsignore/1.1/Fri Jul 22 16:32:37 2016//
+D

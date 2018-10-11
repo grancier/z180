@@ -1,0 +1,166 @@
+RomWBW Distribution File Catalog
+================================
+
+This document documents the location(s) of applications and
+related files that are distributed with RomWBW.  These files
+can be found on the RomWBW ROM disk and/or the RomWBW default
+floppy/hard disk images.
+
+The default RomWBW distribution includes a ROM disk for a
+system with 512KB of ROM.  Using a custom build, it is also
+possible to create a larger 1024KB ROM image appropriate
+for systems that have implemented this size ROM area.  Below,
+the column labeled ROMs documents which ROM sizes include
+the associated file.  Larger ROMs include more files.
+
+The RomWBW build process also generates sample disk images, 2 floppy
+disk images and 2 hard disk images.  You will find these images
+in the Binary directory of the distribution.  The images are
+named fd0 and fd1 for the floppy images and hd0 and hd1 for the
+hard disk images.  Below, the column labeled Disks indicates
+where files can be found on these images.  In this column,
+the number prefixed by S means slice and the the number
+prefixed by U means user area.  So, HD0:S1:U2 would mean
+the file is found on the hd0 image on slice 1 in user area 2.
+Since floppy disks do not have slices, there is no slice
+specification for those images.
+
+The files placed on the ROM disk or floppy/hard disk images can
+be easily customized.  Refer to the RomWBW build documentation
+for instructions on how to customize thhe files included.  The list
+below documents the default files placed in each location.
+
+Standard DRI CP/M 2.2 Distribution Files
+========================================
+
+These applications and files come with Digital Research CP/M 2.2 as 
+part of the standard distribution.  Theey are documeted in the DRI 
+CP/M 2.2 Manual.  A PDF soft copy of this manual is included in the Doc 
+directory of the RomWBW distribution.
+
+These files were extracted from an original Xerox 1800 system disk.
+ 
+File		Notes	ROMs		Disks
+------------	-----	------------	------------------------------
+ASM.COM			512, 1024	FD0:U0, HD0:S0:U0
+DDT.COM		(1)	512, 1024	FD0:U0, HD0:S0:U0
+BIOS.ASM	(2)	1024		FD0:U0, HD0:S0:U0
+DEBLOCK.ASM		1024		FD0:U0, HD0:S0:U0
+DISKDEF.LIB		1024		FD0:U0, HD0:S0:U0
+DUMP.ASM		1024		FD0:U0, HD0:S0:U0
+DUMP.COM		512, 1024	FD0:U0, HD0:S0:U0
+ED.COM			512, 1024	FD0:U0, HD0:S0:U0
+LOAD.COM		512, 1024	FD0:U0, HD0:S0:U0
+PIP.COM			512, 1024	FD0:U0, HD0:S0:U0
+STAT.COM		512, 1024	FD0:U0, HD0:S0:U0
+SUBMIT.COM	(3)	512, 1024	FD0:U0, HD0:S0:U0
+XSUB.COM		512, 1024	FD0:U0, HD0:S0:U0
+
+Notes:
+  (1) DDT.COM from Xerox 1800 implements the RST vector change discussed in
+      DRI CP/M Application Note #7.  It uses RST 6 instead of RST 7
+      to avoid conflicts with Z80 INT MODE 1 interrupts.
+  (2) BIOS.ASM is the standard example BIOS source from DRI, it is *not*
+      the source for the RomWBW BIOS or the Xerox 1800 BIOS.
+  (3) SUBMIT.COM is patched with DRI CP/M Patch #3 which forces the
+      temp file onto A:.
+
+RomWBW Specific Applications
+============================
+
+These applications and files were created or customized specifically for use
+under RomWBW.  They are documented in ???.  Some of these applications were
+created originally for RomWBW while others are ports of pre-existing
+applications.  In all cases the source of the application is provided in
+the RomWBW distribution and they are all built as part of the RomWBW
+build process.
+
+File		Notes	ROMs		Disks
+------------	-----	------------	------------------------------
+ASSIGN.COM		512, 1024	FD0:U0, HD0:S0:U0
+FDU.COM			512, 1024	FD0:U0, HD0:S0:U0
+FORMAT.COM		512, 1024	FD0:U0, HD0:S0:U0
+MODE.COM		512, 1024	FD0:U0, HD0:S0:U0
+OSLDR.COM		512, 1024	FD0:U0, HD0:S0:U0
+RTC.COM			512, 1024	FD0:U0, HD0:S0:U0
+SURVEY.COM		512, 1024	FD0:U0, HD0:S0:U0
+SYSCOPY.COM		512, 1024	FD0:U0, HD0:S0:U0
+SYSGEN.COM		512, 1024	FD0:U0, HD0:S0:U0
+TALK.COM		512, 1024	FD0:U0, HD0:S0:U0
+TIMER.COM		512, 1024	FD0:U0, HD0:S0:U0
+XM.COM			512, 1024	FD0:U0, HD0:S0:U0
+TUNE.COM	(1)	1024		HD0:S0:U3
+
+Notes:
+  (1) See below for list of sample sound files that can be
+      played by TUNE.COM.
+
+Sample Sound Files
+==================
+
+These files are sound files that can be played by the TUNE.COM application.
+The extension of the file indicates the format of the file.
+
+File		Notes	ROMs		Disks
+------------	-----	------------	------------------------------
+ATTACK.PT3				HD0:S0:U3
+BACKUP.PT3				HD0:S0:U3
+BADMICE.PT3				HD0:S0:U3
+DEMO.MYM				HD0:S0:U3
+DEMO1.MYM				HD0:S0:U3
+DEMO3.MYM				HD0:S0:U3
+DEMO3MIX.MYM				HD0:S0:U3
+DEMO4.MYM				HD0:S0:U3
+HOWRU.PT3				HD0:S0:U3
+ITERATN.PT3				HD0:S0:U3
+LOOKBACK.PT3				HD0:S0:U3
+LOUBOUTN.PT3				HD0:S0:U3
+NAMIDA.PT3				HD0:S0:U3
+RECOLL.PT3				HD0:S0:U3
+SANXION.PT3				HD0:S0:U3
+SYNCH.PT3				HD0:S0:U3
+TOSTAR.PT3				HD0:S0:U3
+VICTORY.PT3				HD0:S0:U3
+WICKED.PT3				HD0:S0:U3
+YEOLDE.PT3				HD0:S0:U3
+YEOVIL.PT3				HD0:S0:U3
+
+Third-Party Applications
+------------------------
+
+These files are an assortment of useful CP/M applications.  They are
+not built as part of the RomWBW build process and no source code is
+included in the RomWBW distribution.  They were originally sourced from
+various CP/M application repositories on the Internet.
+
+File		Notes	ROMs		Disks
+------------	-----	------------	------------------------------
+CLRDIR.COM		512, 1024	FD0:U0, HD0:S0:U0
+COPY.CFG		512, 1024	FD0:U0, HD0:S0:U0
+COPY.COM		512, 1024	FD0:U0, HD0:S0:U0
+DDTZ.COM		512, 1024	FD0:U0, HD0:S0:U0
+DIF.COM			512, 1024	FD0:U0, HD0:S0:U0
+FA16.CFG		512, 1024	FD0:U0, HD0:S0:U0
+FDISK80.COM		512, 1024	FD0:U0, HD0:S0:U0
+FILEATTR.COM		512, 1024	FD0:U0, HD0:S0:U0
+FILEDATE.COM		512, 1024	FD0:U0, HD0:S0:U0
+FILEDATE.CFG		512, 1024	FD0:U0, HD0:S0:U0
+FLASH.COM		512, 1024	FD0:U0, HD0:S0:U0
+INITDIR.CFG		512, 1024	FD0:U0, HD0:S0:U0
+LDDS.COM		512, 1024	FD0:U0, HD0:S0:U0
+LDP2D.COM		512, 1024	FD0:U0, HD0:S0:U0
+LINK.COM		512, 1024	FD0:U0, HD0:S0:U0
+MBASIC.COM		512, 1024	FD0:U0, HD0:S0:U0
+NULU.COM		512, 1024	FD0:U0, HD0:S0:U0
+PUTDS.COM		512, 1024	FD0:U0, HD0:S0:U0
+RELOG.COM		512, 1024	FD0:U0, HD0:S0:U0
+RMAC.COM		512, 1024	FD0:U0, HD0:S0:U0
+SUPERSUB.COM		512, 1024	FD0:U0, HD0:S0:U0
+TD.CFG			512, 1024	FD0:U0, HD0:S0:U0
+UNARC.COM		512, 1024	FD0:U0, HD0:S0:U0
+ZAP.COM			512, 1024	FD0:U0, HD0:S0:U0
+
+Notes:
+  (1) 
+
+

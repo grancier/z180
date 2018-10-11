@@ -1,0 +1,265 @@
+	SUBTTL	GIDE (IDE/ATA) Drive (GIDE.180)
+	PAGE
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Hard disk routines as implemented for	Tilmann Reh's GIDE board
+; adapted to the D-X Designs Pty Ltd P112.  Portions derived from GIDE.Z80
+; with tips from GIDETEST.PAS by Tilmann Reh.
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This module only accomodates the following Three Commands of the suite
+; of IDE/ATA with the Command Definition Block in Memory as:
+;
+;				 R/W		Init
+;Byte0 [  Command   ]	        20/30		 91
+;    1 [ Parm BitMap]	       7C/(7E)		 74
+;    2 [ Drive/Head ]		0AnH		0AnH-1
+;    3 [ Cyl # (Hi) ]		CylHi		CylHi
+;    4 [ Cyl # (Lo) ]		CylLo		CylLo
+;    5 [  Sector #  ]		Sctr		 -
+;    6 [ Sector Cnt ]		SCnt		NSecs
+;    7 [ Error Reg  ]		(0AA)		 -
+;    8 [ Digital Out]		 -		 -
+;	    Results/Status:	Stat		Stat
+;				Reg		Reg
+;
+;==========================================================================
+; See if GIDE Controller is present.  Set "GIDEOk" Flag 0 if Yes, Else Non-0
+
+CkGIDE:	LD	A,55H		; Get first Byte pattern
+	OUT	(IDECHi),A	;  Write it
+	LD	B,A
+	IN	A,(IDECHi)	;   Read Back
+	CP	B		; Match?
+	JR	NZ,CkGID0	; ..jump if Not
+	CPL			; Else get 1's complement
+	OUT	(IDECHi),A	;  Write
+	LD	B,A
+	IN	A,(IDECHi)	;   Read Back
+	CP	B		; Match?
+	JR	Z,CkGID1	; ..jump if Yes
+CkGID0:	DEFB	0F6H		; Set Bad w/"OR  0AFH"
+CkGID1:	XOR	A		; Set Ok (Zero)
+	LD	(GIDEOk),A	;  Save Flag
+	RET
+	
+;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+; Initialize the Drive to the Physical Geometry defined in the
+; Non-volatile DS-1202/1302 Clock RAM.  Only perform if Drive detected.
+
+InGIDE:	LD	A,(NVRate)	; Clock RAM Ok?
+	RLA			;  (B7 to Carry)
+	RET	C		; ..Quit if Not
+	CALL	CkGIDE		; Was Drive Electronics detected?
+	SCF			;  (prepare for No)
+	RET	NZ		; ..Quit if Not
+	LD	HL,hdComd	; Else Set Command Block
+	LD	(HL),91H	; Initialize Command
+	INC	HL
+	LD	(HL),74H	;  Bit Map of Regs to Set
+	INC	HL
+	LD	A,(hdHds)	; Get # Heads
+	DEC	A		;  -1 (for Max Hd #)
+	OR	0A0H		;   Add Constant bits, Drive 0
+	LD	(HL),A
+	INC	HL
+	LD	DE,(hdTrks)	;  Get # Tracks (Cylinders)
+	LD	(HL),D		;   Save Cyl(Hi)
+	INC	HL
+	LD	(HL),E		;    Cyl(Lo)
+	INC	HL
+	INC	HL		;      (skip Sctr #)
+	LD	A,(hdSPT)
+	LD	(HL),A		;     Sctrs/Track (in NSects)
+	CALL	GoGIDE		; Set Parms
+	RET	NC		;   Exit if Ok
+	LD	A,0FFH		; Else Set Flag for Bad Drive (retain CF)
+	LD	(GIDEOk),A	;  disable future accesses
+	RET
+
+;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+; Boot the System from a GIDE (IDE/ATA) Drive.  Assume 11k always loaded.
+;  This code assumes that an IDE drive has already been detected and
+;  initialized.  It first loads the sector at Trk0, Hd0, Sctr1 to 8000H,
+;  then validates the Boot sector (first 128 bytes).  If Ok, it extracts
+;  the load address, loads the system to that address, then overlays the
+;  NV Clock RAM contents into the boot sector area, and executes the
+;  address specified in the Boot Sector.
+
+BtGIDE:	LD	HL,hdComd	; Set Command Block
+	LD	(HL),CMDRD	; Read
+	INC	HL
+	LD	(HL),7EH	;  (bit map)
+	INC	HL
+	LD	(HL),0A0H	;   Unit 0, Head 0
+	INC	HL
+	LD	(HL),0		;    Cyl Hi = 0
+	INC	HL
+	LD	(HL),0		;     Cyl Lo = 0
+	INC	HL
+	LD	(HL),1		;      Sector 1
+	INC	HL
+	LD	(HL),1		;       Only 1 Sector
+	INC	HL
+	LD	(HL),0AAH	;        Use Retry
+	LD	HL,8000H	; Set Load Address
+	CALL	GoGIDE		; Read the Boot Sector
+	RET	C		; ..return Bad if Error
+
+; We have the Boot Sector in Memory.  Validate the Fetch Load Address
+
+	LD	HL,(8000H)	; Get first two bytes
+	LD	BC,2176H	;  Should be these (reversed)
+	SBC	HL,BC		; Match? (CF clear from above)
+	JR	NZ,TryOld	; ..try old format if Not
+;--------------------------------------------------------------------
+; ROMv5.0 Mods                                                   TAG
+; Bypass the normal load-at-execution address and load at 8100H.
+; Instead of loading 22 sectors, load 32.  The B/P BIOS sets 2 system
+; tracks for GIDE and emulates 16 SPT, so load two tracks worth of
+; data.
+;	LD	HL,(8002H)	; Else Get Load Address
+;	LD	B,22		;   Set # Sectors to load
+	ld	hl,8100h	; Load here instead
+	ld	b,32		;   Set # of Sectors to load
+; End of mods
+;--------------------------------------------------------------------
+
+; Loop here to read all sectors into position in memory
+
+BtGID0:	PUSH	BC		; Save Counter
+	CALL	GoGIDE		; Read a sector
+	POP	BC
+	RET	C		; ..return if Error
+	LD	(HDBUFR),HL	; Save load addr for next sector
+	LD	HL,hdSec
+	INC	(HL)		;  Bump to Next Sector
+	LD	A,(hdSPT)
+	CP	(HL)		;   Time for Next Track?
+	JR	NC,BtGID1	;  ..jump if Not
+	LD	(HL),1		; Else reset for Sector 1
+	LD	HL,hdHead
+	INC	(HL)		;  and select next Head
+BtGID1:	LD	HL,(HDBUFR)	; Get Load Addr back
+	DJNZ	BtGID0		; ..loop til Done
+
+	JP	BootV0		; Load NV Clock RAM and Execute OS!
+				;  (from common DISKOP Code)
+
+; Try old boot sector format
+
+TryOld:	LD	HL,8000h	; Sumcheck the boot sector
+	LD	BC,200h		; length loaded
+	XOR	A
+Try1:	ADD	A,(HL)		; run the check
+	CPI			;   HL++, BC--, set P/V
+	JP	PE,Try1
+	AND	A		; sumcheck to zero?
+	RET	NZ		; ..return if Not
+	CALL	8000H		; ..Yes: go run it
+	LD	HL,GBtErr	; if it returns: it is an error
+	CALL	PutMsg
+	RET
+
+GBtErr:	DB	'Error from HD boot-sector code', CR, 0
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Raw GIDE Driver.  Assumes Command in hdComd and Parms in Comnd Data Block
+
+GoGIDE:
+; Wait approximately 5 Seconds for Target to become Busy.
+
+	LD	B,20		; Set Outer Loop counter
+GoGID0:	IN0	E,(RLDR1L)	; Get CPU Speed dependant counter value
+	IN0	D,(RLDR1H)	;   for Inner Loop
+GoGID1:	IN	A,(IDECmd)	; Get Status
+	RLA			;  relevant bit to CF
+	JR	NC,GoGID2	; ..proceed if Ready
+	DEC	DE		; Else Count Down
+	LD	A,D
+	OR	E		; Inner loop Expired?
+	JR	NZ,GoGID1	; .loop if Not
+	DJNZ	GoGID0		; ..loop til Outer expired
+	SCF			; Set Error Flag
+	RET			;   Quit if we get here
+
+GoGID2:	PUSH	HL		; Save R/W Load Address
+	LD	HL,hdBMap	;   Pt to Bit Map
+	LD	BC,IDESDH	; Set Port Address (GIDE+0EH)
+	LD	E,(HL)		;   fetch
+	LD	D,7		;    and set number of bytes
+	RL	E		; Shift B7 out
+
+GoGID3:	RL	E		; Test bit to Carry
+	INC	HL		;  bump Byte ptr
+	JR	NC,GoGID4	; ..jump if No byte to write
+	LD	A,(HL)		; Else get byte
+	OUT	(C),A		;  set IDE Register
+GoGID4:	DEC	BC		; Down to next Register address
+	DEC	D		; Finished?
+	JR	NZ,GoGID3	; ..loop if Not
+
+	POP	HL		; Restore R/W Load Address
+	LD	BC,IDEDat	;   Pre-load Data Reg Adr in C, 0 in B
+	LD	A,(hdComd)	; Get Command Byte
+	CP	CMDRD		; Read Sector?
+	JR	Z,HRead
+	CP	CMDWR		; Write Sector?
+	JR	Z,HWrite
+	CP	CMDINIT		; Initialize Drive Parameters?
+	SCF			;  (prepare Error return flag)
+	RET	NZ		; ..quit w/Error if Not
+	CALL	Cmd_Wt		; Else Sent Init Command
+	JR	HdFnQ		; ..finish up
+
+;.....
+; Read a Sector from the Disk, or Disk Parameters to the Buffer
+
+HRead:	CALL	Cmd_Wt		; Send Command in A, Return when Ready
+HRead0:	IN	A,(IDECmd)	; Get Status
+	BIT	3,A		; Ready?
+	JR	Z,HRead0	; ..loop if Not
+	INIR			; Read 512 bytes
+	INIR			;   in two-256 byte sequences
+HdFini:	CALL	Wt_Rdy		; Wait for drive to become Ready
+;; -- May need this with some Older Drives that send ECC bytes with
+;;    no warning!
+;;	BIT	4,A		; DRQ Shifted?
+;;	JR	Z,HdFnQ		; ..jump if Not
+;;	IN	A,(IDEDat)	; Else Read data reg (ECC Bytes?
+;;	JR	HdFini		; ..loop til no more data
+
+HdFnQ:	IN	A,(IDECmd)	; Restore byte
+	AND	10001001B	; Busy, DRQ, or Error?
+	RET	Z		; ..exit if Ok
+	SCF			; Else Set Error Flag
+	RET			;   and Quit
+
+;.....
+; Write a 512-byte Sector to the Disk
+
+HWrite:	CALL	Cmd_Wt		; Send Command in A, Return when Ready
+HWrit2:	IN	A,(IDECmd)
+	BIT	3,A		; Data Request?
+	JR	Z,HWrit2	; ..loop if Not
+	OTIR			; Else Write 512 bytes
+	OTIR			;  in two-256 byte operations
+	CALL	Wt_Rdy
+	JR	HdFnQ		; ..and finish off above
+
+;======================== SUPPORT ROUTINES ========================
+; Send command to the IDE Drive, fall thru to wait for Ready Status
+
+Cmd_Wt:	OUT	(IDECmd),A	;   Start Operation
+			;..fall thru to wait for Ready
+;.....
+; Wait for Drive to become Ready (No Timeout)
+; Enter: None
+; Exit : None
+; Uses : AF
+
+Wt_Rdy:	IN	A,(IDECmd)	; Get Drive Status
+	RLA			; Ready?
+	JR	C,Wt_Rdy	; ..loop if Not
+	RET
+
+;======================= End of GIDE.180 ==========================
+

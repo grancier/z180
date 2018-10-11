@@ -1,0 +1,1318 @@
+	SUBTTL	Floppy Drive Hardware Parameters
+	PAGE
+;===============================================================;
+;      D R I V E   H A R D W A R E   P A R A M E T E R S	;
+;===============================================================;
+; Standard Drive Parameters
+;  (Definitions modified to include 1st Sector Number at end of table. HFB)
+
+; Drive parameters for 3" DOS-compatible disks
+
+DPB3i:	DB	0DFH		; SRT=3mS, HUT=240mS
+	DB	02H		; HLT=4mS
+	DB	25H		; 5 secs. (25 index pulses)
+	DB	02H		; 512 bytes/sector
+	DB	18		; Sectors/track
+	DB	1BH		; Gap length
+	DB	0FFH		; DTL (not used)
+	DB	6CH		; Gap-3 length: Format
+	DB	0E5H		; Data fill: Format (CP/M)
+	DB	15		; Head-settle time (mS)
+	DB	8		; Motor-on delay * 1/8 sec.
+	DB	79		; Highest cylinder no.
+	DB	00H		; data rate (500kb/s)
+	DB	1		;; 1st Sector Number
+
+; Drive parameters for 5" DOS-compatible disks
+
+DPB5i:	DB	0DFH		; SRT=3mS, HUT=240mS
+	DB	02H		; HLT=4mS
+	DB	25H		; 5 secs. (25 index pulses)
+	DB	02H		; 512 bytes/sector
+	DB	9		; Sectors/track
+	DB	2AH		; Gap length
+	DB	0FFH		; DTL (not used)
+	DB	50H		; Gap-3 length: Format
+	DB	0E5H		; Data fill: Format (CP/M)
+	DB	15		; Head-settle time (mS)
+	DB	8		; Motor-on delay * 1/8 sec.
+	DB	39		; Highest cylinder no.
+	DB	02H		; data rate (250kb/s)
+	DB	1		;; 1st Sector Number
+
+;; NOTE: A de-facto "convention" established years ago (by Ampro, I believe)
+;;  used a constant offset of 16 (1st physical sector = 17/11H) to indicate
+;;  double-sided disks, whereas single-sided disks began with Sector 1.
+
+;; Drive parameters for 3.5"/5.25" Ampro/ON!/YASBEC/SB-180 DSQD disks
+;;  80-track, 5-1k Sctrs/Trk, Dbl-Sided, 250 kb/s (MFM), 1st Sctr = 11H (17)
+;;   Formatted Skew = 2, Sequential Read/Write
+
+DPBAmp:	DB	0DFH		;; SRT=3mS, HUT=240mS
+	DB	02H		;; HLT=4mS
+	DB	25H		;; 5 secs. (25 index pulses)
+	DB	03H		;; 1024 bytes/sector
+	DB	5		;; Sectors/track
+	DB	1BH		;; Gap length
+	DB	0FFH		;; DTL (not used)
+	DB	54H		;; Gap-3 length: Format
+	DB	0E5H		;; Data fill: Format (CP/M)
+	DB	15		;; Head-settle time (mS)
+	DB	8		;; Motor-on delay * 1/8 sec.
+	DB	79		;; Highest cylinder no.
+	DB	02H		;; data rate (250kb/s)
+	DB	17		;; 1st Sector Number
+
+;; NOTE: This format expands on the constant offset principle using an offset
+;;  of 40H (1st Sector = 65/41H).  An offset of 20H was in use by the XBIOS
+;;  system for SB-180s, and 30H is used for 5.25" B/P Bios High-Density disks.
+
+;; Drive parameters for 3.5" BPBios "High-Density" disks.
+;;  80-track, 11-1k Sctrs/Trk, Dbl-Sided, 500 kb/s (MFM), 1st Sctr = 41H (65)
+;;   Formatted Skew = 2, Sequential Read/Write.
+
+DPB3BP:	DB	0DFH		;; SRT=3mS, HUT=240mS
+	DB	02H		;; HLT=4mS
+	DB	25H		;; 5 secs. (25 index pulses)
+	DB	03H		;; 1024 bytes/sector
+	DB	11		;; Sectors/track
+	DB	11H		;; Gap length
+	DB	0FFH		;; DTL (not used)
+	DB	22H		;; Gap-3 length: Format
+	DB	0E5H		;; Data fill: Format (CP/M)
+	DB	15		;; Head-settle time (mS)
+	DB	8		;; Motor-on delay * 1/8 sec.
+	DB	79		;; Highest cylinder no.
+	DB	00H		;; data rate (500kb/s)
+	DB	65		;; 1st Sector Number
+
+;- Drive parameters for 5.25" B/P Bios "High-Density" disks
+;-  80-track, 9-1k Sctrs/Trk, Dbl-Sided, 500 kb/s, 1st Sctr = 31H (49)
+;-   Formatted Skew = 2, Sequential Read/Write
+
+DPB5HD:	DB	0DFH		;- SRT=3mS, HUT=240mS
+	DB	02H		;- HLT=4mS
+	DB	25H		;- 5 secs. (25 index pulses)
+	DB	03H		;- 1024 bytes/sector
+	DB	9		;- Sectors/track
+	DB	11H		;- Gap length
+	DB	0FFH		;- DTL (not used)
+	DB	1BH		;- Gap-3 length: Format
+	DB	0E5H		;- Data fill: Format (CP/M)
+	DB	15		;- Head-settle time (mS)
+	DB	8		;- Motor-on delay * 1/8 sec.
+	DB	79		;- Highest cylinder no.
+	DB	00H		;- data rate (500kb/s)
+	DB	49		;- 1st Sector Number
+
+;- Drive parameters for 5.25" Ampro/ON!/YASBEC/SB-180 DSQD disks
+;-  80-track, 5-1k Sctrs/Tk, Dbl-Sided, MFM, 1st Sctr = 11H (17)
+;-   in "High-Density" PC-type Drive (300 kbps)
+
+DPBAm0:	DB	0DFH		;- SRT=3mS, HUT=240mS
+	DB	02H		;- HLT=4mS
+	DB	25H		;- 5 secs. (25 index pulses)
+	DB	03H		;- 1024 bytes/sector
+	DB	5		;- Sectors/track
+	DB	1BH		;- Gap length
+	DB	0FFH		;- DTL (not used)
+	DB	54H		;- Gap-3 length: Format
+	DB	0E5H		;- Data fill: Format (CP/M)
+	DB	15		;- Head-settle time (mS)
+	DB	8		;- Motor-on delay * 1/8 sec.
+	DB	79		;- Highest cylinder no.
+	DB	01H		;- data rate (300kb/s)
+	DB	17		;- 1st Sector Number
+
+	SUBTTL	Diskette Boot Loader
+	PAGE
+;=======================================================================;
+;	 B A S I C    D I S K E T T E    B O O T    L O A D E R		;
+;  Modified to scan for "standard" P112 formats and "New" P112 method.	;
+;  This code only attempts to boot from Floppy Unit 0, NOT selectable.	;
+;=======================================================================;
+
+FDBoot:	LD	A,(NVRate)	;-
+	BIT	7,A		;- Config RAM Valid?
+	JR	Z,FDBt0		;- ..jump if So to Try New Boot Methodology
+
+	; Default method where no Config info exists tries to decipher all
+	; defined formats for 3.5" and 5.25" drives in order.
+
+FDAuto:	CALL	Reset		;- Reset Controller (in case of retry)
+	CALL	FDB3H		;- Try to Boot 3.5"/5.25" HD Drives, 500 kbps
+	CALL	ChkBrk		;-   (check for Abort)
+	CALL	FDB3L		;-  Try 3.5" HD in 250 kbps & 3.5/5.25" Non-HD
+	CALL	ChkBrk		;-    (check for Abort)
+	CALL	FDB5L		;-   Finally, try 5.25" HD in 300 kbps mode
+	LD	HL,fmFail	;- Unrecognized format if Fail
+	JP	FailBt		;- ..abort back to ROM
+
+; Key Boot attempts on Drive Types as configured in Clock NV Ram
+
+FDBt0:	CALL	Reset		;- Reset Controller (in case of retry)
+	LD	A,(nvRam1)	;- Get Floppy 0 Configuration
+	LD	B,A		;-
+	AND	00000011B	;-
+	CP	00000010B	;- Is it 5.25"?
+	JR	Z,FDBt05	;- ..jump if Yes
+
+	; Not 5.25", Let's try 3.5" Specs here
+
+	BIT	7,B		;- Hi-Density capable?
+	JR	Z,FDB3L0	;- ..try 250 kbps formats if Not
+	LD	IX,DPB3BP	;- Set to 500 kbps "HD" format
+	LD	D,0		;-
+	CALL	ReadID		;- Is disk "HD"?
+	JR	C,FDB3L		;- ..try 250 kbps if Not (w/reset)
+	CP	3		;- 1k Sectors?
+	JR	Z,BootNew	;- ..go boot if Yes
+	JR	FDB3H2		;-  ..else try 512 byte Sector Boot
+
+	; Try 5.25" Drive Specs only here
+
+FDBt05:	BIT	7,B		;- Hi-Density capable?
+	JR	Z,FDB3L0	;- ..try 250 kbps formats if Not
+	LD	IX,DPB5HD	;- Else try 500 kbps 5.25"
+	LD	D,0		;-
+	CALL	ReadID		;- Is disk "HD"?
+	JR	NC,BootNew	;- ..go boot if Yes
+	JR	FDB5L		;-  ..else try 300 kbps rate
+
+;.....
+; Try ReadID on Unit 0 in 3.5" HD (500 kbps) mode
+
+FDB3H:	LD	IX,DPB3BP	;- Try 3.5" HD formats first
+	LD	D,0		;-   Drive A: only
+	CALL	ReadID		;- Can we read any Disk ID Data?
+	RET	C		;- ..quit if not Hi-Dens or not present
+	CP	3		;- 1k Sectors?
+	JR	Z,FDB3H0	;- ..jump to Check 3.5/5.25" HD if So
+FDB3H2:	LD	IX,dpb3i	;-  (preset for Orig P112 3.5" HD)
+	CP	2		;- 512 Byte Sectors?
+	JR	Z,BootNew	;- ..jump to boot if Yes
+	SCF			;-  Else
+	RET			;-   Return Carry Set if Not
+
+; We Read a 1k Sector Size in HD (500 kbps) mode.  Check Starting Sector No.
+;  Code Recognizes B/P Bios 3.5" HD (Sctr # 65-75), 5.25" HD (Sctr # 49-57).
+
+FDB3H0:	DEC	HL		;- back up to Sector #
+	LD	A,(HL)		;-
+	CP	65		;- B/P 3.5" HD?
+	JR	NC,BootNew	;- ..jump if Yes
+	LD	IX,DPB5HD	;-  (preset for B/P 5.25" HD)
+	CP	49		;- B/P 5.25" HD?
+	JR	NC,BootNew	;- .jump if Yes
+	RET			;-   Else return, CY Set
+
+; Try ReadID on Unit 0 at 250 kbps (3.5" HD @ Low Dens, 3.5/5.25" Non-HD Drvs).
+; Reset before attempting Read to change the Parameters of the Interface.
+
+FDB3L:	CALL	Reset		;- Reset the Contr to avoid hanging the system
+FDB3L0:	LD	IX,DPBAmp	;- Try Ampro DSQD format
+	LD	D,0		;- Reset for Drive A:
+	CALL	ReadID		;- Can we read it Now?
+	RET	C		;- ..return Error if Can't Read or Not Present
+	CP	3		;- Ampro Format (1k Sectors)?
+	JR	Z,BootNew	;- ..jump to Boot New Style if So
+	LD	IX,DPB5i	;-  (preset for Orig P112 "360k" format)
+	CP	2		;- 512 Byte Sectors?
+	JR	Z,BootNew	;- .jump to Boot if Yes
+	SCF			;-   Else
+	RET			;-    return Error if Not
+
+; Try ReadID on Unit 0 at 300 kbps (5.25" HD @ Low Dens, PC strapping).
+; Reset before attempting Read to change the Parameters of the Interface
+
+FDB5L:	CALL	Reset		;- Reset the Contr to avoid hanging the system
+	LD	IX,DPBAm0	;- Try Ampro DSQD format
+	LD	D,0		;- Reset for Drive A:
+	CALL	ReadID		;- Can we read it Now?
+	RET	C		;- ..return Error if Can't Read or Not Present
+	CP	3		;- 1k Byte Sectors?
+	JP	NZ,Fails	;- ..jump to return Error if Not
+			;..fall thru to..
+; When we arrive here, we have identified the Sector Size, and "guessed" the
+; format.  Read the first physical Sector from Track 0, Head 0 into a default
+; location and decipher the boot format.  This code assumes only Unit #0
+; (default drive A:).  Enter: IX -> ROM DPB structure for parameters
+
+BootNew: CALL	Reset		;- Clear Controller in case of format change
+	LD	HL,8000H	;- Point to where the Boot Sector Loads
+	LD	BC,1*256+0	;- 1 Sector, Track 0
+	LD	D,0		;-  Drive/Unit #0 (A:)
+	LD	E,(IX+SCTR_1)	;-   First physical Sector #
+	PUSH	DE		;-    save regs
+	LD	A,2		;- "Read" command
+	RST	DiskV		;-   Do the Read (IX unchanged)
+	POP	DE		;-    restore regs
+	LD	HL,btFail	;-     (prepare Err msg in case)
+	JP	C,FailBt	;- ..Print msg & Exit if Error
+
+; We Read the Boot Sector into position.  Validate and continue if Good
+
+	LD	HL,(8000H)	;- Get first 2 bytes
+	LD	BC,2176H	;-  (carry clear here)
+	SBC	HL,BC		;- Are they what they should be?
+	JP	NZ,UseOld	;- ..jump to Check Old P112 Boot if Not
+
+	LD	(80FEH),SP	;- Else Save Stack Ptr
+	LD	SP,80FEH	;-  and set local one
+	LD	B,(IX+EOT)	;- Get Number of Sectors/Track
+	LD	A,(IX+SCTR_1)	;-  Initial Sector #
+	LD	C,1		;-   Assume only one track
+	CP	65		;- Is it BP 3.5" HD format?
+	JR	NC,BootN0	;- ..jump if So
+;--------------------------------------------------------------------
+; ROMv5.0 Mods							 TAG
+;  The next two lines removed to force two system track load on all
+; remaining disk formats.
+;;	CP	17		;- Is it either P112 DOS-compatible formats?
+;;	JR	C,BootN0	;- ..jump if So
+; End of Mods                                                    TAG
+;--------------------------------------------------------------------
+	INC	C		;- Else Use 2 Boot Tracks (1 -> 2)
+			;..fall thru to..
+; Now we are ready to boot the "New" Boot Sector format.
+;   B = # Sectors/Trk, C = Number of Tracks to load, IX -> DPB
+; The 128-byte Boot Sector consists of:
+;
+;  0000 76		HALT
+;  0001 21 xx xx	LD	HL,CCP-80H	; Load Address
+;  0004 C9		RET
+;  0005 C3 yy yy	JP	CBOOT		; Jump to Bios Cold Boot
+;     0008-003F - undefined (Null-Terminated Text ID String in 0010-003F)
+;
+; This Loader code fills in additional information to transfer to the
+; System Bios containing the Clock RAM contents.  Layout and use is:
+;
+;  0040 zz		; NV Ram Valid Flag.  MSB=1 if Not Valid
+;     0041-0058 - Contents of NV Ram Bytes 0-23 if Valid
+;     0059-007F - undefined (Stack Area for Booting)
+
+BootN0:	XOR	A		;-
+	LD	(8000H),A	;- Start at Track 0
+;--------------------------------------------------------------------
+; ROMv5.0 Mods							 TAG
+; Bypass the normal load-at-execution address, and put here instead.
+;;	LD	HL,(8002H)	;- Get Load Address (-128) for CCP
+	ld	hl,8100h
+; End of Mods                                                    TAG
+;--------------------------------------------------------------------
+BootN1:	LD	E,(IX+SCTR_1)	;- Set first Physical Sector Number on Trk
+BootN2:	LD	D,0		;- Drive/Unit #0 only boots
+	PUSH	BC		;-  Save Regs
+	PUSH	DE		;-
+	PUSH	HL		;-
+	LD	A,(8000H)	;- Get Current Track #
+	LD	C,A		;-  into position
+	LD	B,1		;-   Read only 1 Sector
+	LD	A,2		;-    "Read" Command
+	CALL	DiskOp		;-      Do It!
+	POP	HL		;- Restore Regs
+	POP	DE		;-
+	POP	BC		;-
+	JP	C,BootNE	;- ..quit if Error w/Message
+	PUSH	DE		;-
+	EX	DE,HL		;-
+	LD	HL,0080H	;- Load basic 128-byte CP/M Sector Size
+	LD	A,(IX+SECSZE)	;-  Get Sector Size indicator
+	INC	A		;-   (pre-inc)
+BootN3:	DEC	A		;- Any more multiplies by 2?
+	JR	Z,BootN4	;- ..jump if Not
+	ADD	HL,HL		;- Else HL := HL * 2
+	JR	BootN3		;- ..loop til Done
+
+BootN4:	EX	DE,HL		;- Swap regs back again, DE = Block Size
+	ADD	HL,DE		;-  Add size to load Addr
+	POP	DE		;-   restore regs
+	INC	E		;- Advance to next Sctr #
+	DJNZ	BootN2		;- ..loop to read it if Not end of Trk
+	LD	A,(8000H)	;- Else get Current Trk
+	INC	A		;-  Bump to next
+	LD	(8000H),A	;-   save
+	LD	B,(IX+EOT)	;- Get Sectors/Trk
+	DEC	C		;-  show we deducted a track
+	JR	NZ,BootN1	;- ..loop if another Track to go
+
+; The Boot Tracks have been loaded, Read Clock RAM before Starting the OS
+
+BootV0:	LD	HL,8040H	;- Pt to Unused Boot Sector Buffer Space
+	PUSH	HL		;-  (save)
+	LD	B,25		;-
+BootCl:	LD	(HL),0		;- Zero
+	INC	HL		;-  Buffer
+	DJNZ	BootCl		;-   in case Invalid
+	POP	HL		;- Restore Ptr
+
+	LD	A,(NVRate)	;-
+	LD	(HL),A		;- Save initial Flag value
+	BIT	7,A		;- Is the NV Ram Valid?
+	JR	NZ,BootIt	;- ..jump to Boot if Not
+	INC	HL		;-  Advance
+	XOR	A		;- Start w/Index 0
+	LD	B,24		;-  For Entire RAM Contents
+BootRm:	PUSH	AF		;- Save Index
+	CALL	RdNV		;-  Read NV Ram contents
+	LD	(HL),A		;-   Save in Array
+	INC	HL		;-    Pt to Next Array Loc'n
+	POP	AF		;-     Restore Index
+	INC	A		;-      Index Next
+	DJNZ	BootRm		;-     ..loop til Done
+
+BootIt:
+;--------------------------------------------------------------------
+; ROMv5.0 Mods                                                   TAG
+; Mods for two System Track load
+; The Boot Tracks have been loaded from either Floppy, GIDE, or SCSI,
+; at address 8100H in RAM.
+; If the 'Load and Return' flag is set, leave the OS at 8100H and
+; exit to the handler.  If 'Load and Return' is NOT set, then move
+; the loaded OS into position and execute.
+;--------------------------------------------------------------------
+	ld	a,(OsEx)	; Get the 'Return' flag
+	or	a
+	jr	nz,RetRou	; and exit if returning to ROM code
+; Now, move the loaded OS into the execution address
+MovRout:
+	ld	hl,0ffffh	; Get End of RAM
+	ld	de,(8002h)	;  and CCP-128 load address
+	or	a
+	sbc	hl,de		; Determine how much space there
+	ld	c,l
+	ld	b,h		;  and put in BC
+	inc	bc		; +1 for -1 offset in DE
+	ld	de,0ffffh	; Point to End of RAM
+	ld	hl,80ffh	; Point to start of load buffer-1
+	add	hl,bc		; Determine offset for reverse copy
+	lddr			; Do the copy, top to bottom
+; Shift execution to the loaded OS
+	LD	HL,btMsg	;-
+	CALL	PutMsg		;- Say That we're here
+	LD	HL,(8006H)	;-  Get BIOS Cold Start Vector Address
+	JP	(HL)		;- ..and Off to our OS!
+
+MovLen	equ	$-MovRout
+
+;--------------------------------------------------------------------
+; ROMv5.0 Mod                                                    TAG
+;
+; 'Load and Return' mod used to copy the OS block move routine into
+; the boot sector buffer at 8060H.  This area is unused in the 'new'
+; style loader.
+; The routine will exit back to the debugger via the LrEnt routine
+; in ROM.180, where it will display the execution address of the
+; block move.
+; A subsequent 'Go 8060' command in the debugger will execute the
+; block move, which is followed by a JP to the OS Boot routine.
+RetRou:
+	ld	de,8060h	; Copy the block move routine above
+	ld	hl,MovRout	;  into the Boot Sector buffer at
+	ld	bc,MovLen	;   8060H for later execution.
+	ldir
+	ld	hl,8060h
+	jp	LrEnt		; and exit back to the debugger
+; End of Mods                                                    TAG
+;--------------------------------------------------------------------
+
+btMsg:	DEFB	CR,'OS loaded, booting...',CR,0
+
+BootNE:	LD	SP,(80FEH)	;- Get Entry Stack Ptr
+	LD	HL,secFl
+	JR	FailB8		;- ..print Error and exit
+
+;-.....
+;- The Boot Sector has been read into position and did not check as "New".
+;- Attempt to validate as old Boot Sector by computing Sumcheck.  Err if Bad.
+
+UseOld:	LD	HL,8000H	; Sumcheck the boot sector
+	LD	BC,200H		; Length loaded
+	XOR	A
+Slp:	ADD	A,(HL)		; Run the check
+	CPI			;  HL++, BC--, set P/V
+	JP	PE,Slp		;   All
+
+	LD	HL,smFail
+	AND	A		; Sumcheck to zero?
+	JR	NZ,FailBt
+
+;--------------------------------------------------------------------
+; ROMv5.0 Mod                                                    TAG
+; 'Load and Return' mod
+;  The 'old' style system tracks have been read into memory, but
+; 'Load and Return' doesn't work with 'old' style boot record.
+	push	af
+	ld	a,(OsEx)	; Get 'Load and Return' flag
+	or	a
+	jr	nz,DoRetLd	; Go if 'Load and Return' active
+	pop	af		; Ensure stack stays balanced
+; End of mod
+;--------------------------------------------------------------------
+
+	CALL	Z,8000H		; Yes: go run it.  NB IX -> DPB
+				;  DE = Boot Drive & Type, Stack is valid
+	LD	HL,btErr	; If it returns: it's an error
+	JR	FailBt
+
+FailB8:	LD	HL,secFl	; If it returns; it's an error
+FailBt:	CALL	PutMsg		; Display error message
+FailB9:	LD	A,1
+	CALL	DiskOp		; Drive motor/s off
+	AND	A		;No msgs. from DEBUG
+	RET
+
+;--------------------------------------------------------------------
+; ROMv5.0 Mod                                                     TAG
+; 'Load and Return' modification for 'old' style boot sector.  The
+; 'old' style boot routine requires specific register assignments
+; at boot time that can't be easily met, so we don't allow 'Load and
+; Return' with 'old' style disks.
+DoRetLd:
+	pop	af		; Balance stack
+	ld	hl,NoOld
+	call	PutMsg
+	jr	FailB9		; Exit without debug error
+
+NoOld:	db	'No "Load and Return" with "old" OS loader',cr,0
+; End of mod
+;--------------------------------------------------------------------
+
+btFail:	DB	'Error reading boot sector', CR, 0
+smFail:	DB	'Boot sector failed checks', CR, 0
+secFl:	DB	'Error reading boot track(s)', CR, 0
+btErr:	DB	'Error from boot-sector code', CR, 0
+fmFail:	DB	'Unrecognizable disk format', CR, 0	;-
+
+	SUBTTL	Basic diskette handler
+	PAGE
+;=======================================================================;
+;	B A S I C   D I S K - D R I V E   R O U T I N E S		;
+;  Non-interrupt driven support routines for the SMC diskette chip.	;
+;=======================================================================;
+;   This code is designed to work without interrupts (compatible with
+; the ROM bootstrap code). Consequently, timing functions are done by 
+; polling and/or delay loops.
+;   The DMA is used for data transfer, and is polled for completion (check
+; that the byte counter has decremented to zero).
+
+;Call:
+;	A  - OPCODE:	0 - Reset disk system: all drives uncalibrated
+;			1 - Turn motors off (leave drives calibrated)
+;			2 - Read sector/s
+;			3 - Write sector/s
+;			4 - Verify sector/s
+;			5 - Format track
+;			6 - Translate logical address to physical
+;	B  - No. of sectors to read/write
+;	C  - Track No. (even tracks are Side 0, odd tracks are Side 1)
+;	D  - Drive No. (0..3)
+;	E  - Sector No.
+;	HL - Ptr. to data buffer (logical address)
+;	IX - Ptr. to Drive Parameter Block (DPB)
+
+; Return:
+;	If successful:
+;		CY = 0
+;		A    undefined
+;		HL   advanced past data block
+
+;	If errors:
+;		CY = 1
+;		A    status (see below)
+;		HL   unchanged
+
+;	In either case:
+;		DE -> Result vector (7 bytes)
+;		IX, IY unchanged
+;		BC     trashed
+
+INCFORMAT   equ  0	;Define this to include the FORMAT cmnd.
+
+;======================================================================
+;		L O C A L   E Q U A T E S
+
+		;Return-error status values (in A, if CY=1)
+CALERR	EQU	1	; Error in a recalibration function
+IOERR	EQU	2	; Error posted by Result Phase: see (HL)
+BADSECT	EQU	3	; Sector/Length will overrun track
+LOSTDAT	EQU	4	; DMA did not transfer full block
+TIMEOUT	EQU	5	; Interrupt timed out
+BADCMD	EQU	6	; Invalid function code
+SEKERR	EQU	7	; Seek error
+
+TRIES	EQU	3	; No. of retries on IO errors
+ 
+	;Offsets for inline arguments
+OPCODE	EQU	0	; Command to FDC
+TST0	EQU	1	; Match Status 0
+TST1	EQU	2	;   "	  "   1
+SKIP	EQU	3	; No. of bytes to skip at return
+
+;======================================================================
+;	F . D . C .    C O M M A N D   C O D E S
+
+CMD_RECAL	EQU	7	; Recalibrate
+CMD_SENSE	EQU	8	; Sense Interrupt
+CMD_SEEK	EQU	0FH	; Seek to track
+CMD_READ	EQU	46H	; Read (MFM, implied seek)
+CMD_WRITE	EQU	45H	; Write, ditto
+CMD_VERIFY	EQU	56H	; Verify, ditto
+CMD_FORMAT	EQU	4DH	; Format a track
+CMD_RDID	EQU	4AH	;; Read Sector ID
+;	D . M . A .   C O M M A N D S
+DMA_INCMD	EQU	0CDH	; IO  => MEM
+DMA_OUTCMD	EQU	0F1H	; MEM => IO
+DMA_RUN		EQU	63H	; Kick off Channel-0
+
+;======================================================================
+;		U T I L I T Y   S U B R O U T I N E S
+
+WaitInt:		; Wait for interrupt (but polled)
+	PUSH	BC
+	PUSH	DE
+	LD	B,10		;- Set outer loop counter
+W0:	IN0	E,(RLDR1L)	;- Get Speed-sensitive
+	IN0	D,(RLDR1H)	;-   constant for Inner Loop Count
+
+W1:	IN0	A,(DRC)		; Get interrupt lines
+	BIT	6,A
+	JR	Z,W2		; Go if interrupt set
+	DEC	DE		;-
+	LD	A,D		;-
+	OR	E		;- Inner Loop done?
+	JR	NZ,W1		;- ..loop Inner if Not
+	DJNZ	W0		;-  ..else loop  Outer til done
+	SCF
+	JR	W3		; Exit: timed out
+
+W2:	XOR	A		; Exit: OK
+W3:	POP	DE
+	POP	BC
+	RET
+
+;--------------------------------
+; Check Results of I/O Operations.
+; IY -> Test-Block for Status:  (see "launch" for details)
+
+TestResult:
+	CALL	WaitInt		; Wait for completion
+	LD	A,TIMEOUT
+	JR	C,Exit		; Failed (CY posted to caller)
+
+; Get 7 result bytes after read/write
+
+	PUSH	BC
+	PUSH	DE
+	LD	DE,restab	; Point to Result Table
+	LD	B,7		; No. of expected bytes
+Lc3:	CALL	GetByte
+	LD	(DE),A
+	INC	DE		; Post it
+	DJNZ	Lc3
+	POP	DE
+	POP	BC
+	LD	HL,restab	; Pointer to results block
+	PUSH	HL
+
+	LD	A,(HL)		; ST0
+	AND	0F8H		; Kill variable bits (just errors)
+	CP	(IY+TST0)	; Check to expected value
+	JR	NZ,Bad
+	INC	HL
+	LD	A,(HL)		; ST1
+	AND	0FDH		;;  (kill W/P Bit so we can read W/P Disks)
+	CP	(IY+TST1)	; Check to expected value
+	JR	NZ,Bad
+	INC	HL
+	LD	A,(HL)
+	SUB	0		; No "funny" errors (ever!)
+	JR	NZ,Bad
+
+;; Don't check the count to avoid problems with commands that don't use DMA
+;;	IN0	L,(BCR0L)
+;;	IN0	A,(BCR0H)
+;;	OR	L		; Check that all was transferred
+	POP	HL
+;;	LD	A,LOSTDAT
+;;	JR	NZ,Bad		; Should have counted back to zero
+
+	XOR	A		; It all succeeded!
+	JR	Exit		; OK: return CY=0 (A=0)
+
+Bad1:	LD	A,BADSECT	; Bad sector specification
+	SCF
+	JR	Exit
+
+Bad:	LD	A,IOERR		; Error post: see block at (HL)
+	POP	HL
+	SCF
+
+Exit:	RET			; CY = error
+
+;--------------------------------
+; Send A to Comnd/Data Port
+
+SendByte:
+	PUSH	AF
+Scb1:	IN0	A,(_MSR)	; Check FDC status
+	BIT	7,A		; Wait till ready
+	JR	Z,Scb1
+	POP	AF		; Recover the cmnd. byte
+	OUT0	(_DATA),A
+	RET
+
+;--------------------------------
+; Read Comnd/Data Port to A
+
+GetByte:
+	IN0	A,(_MSR)
+	BIT	7,A		; Ready?
+	JR	Z,GetByte
+	IN0	A,(_DATA)	; Get it
+	RET
+
+;--------------------------------
+; Send String of Commands from HL
+
+SendCmdStrg:
+	PUSH	BC		; 1st. byte is count
+	LD	B,(HL)		; Save count
+Scs1:   INC	HL
+	LD	A,(HL)		; Get cmnd. byte
+	CALL	SendByte	; Send it
+	DJNZ	Scs1		; Repeat
+	POP	BC
+	RET
+
+;--------------------------------
+; Force a Recalibrate on this Drive
+
+UnCal:	PUSH	HL
+	LD	HL,calibd	; First force a recalibrate
+	LD	A,(mask)
+	CPL
+	AND	(HL)		; Turn of the "calibrated" bit
+	LD	(HL),A
+	POP	HL
+	RET
+
+;--------------------------------
+; Set up DMA Buffers for Input
+
+DMAInput:
+	CALL	AbsAddr		; Get physical addr. for DMA
+	OUT0	(DAR0L),L
+	OUT0	(DAR0H),H
+	OUT0	(DAR0B),A	; Destination pointers
+	LD	A,_DMA
+	OUT0	(SAR0L),A	; Source: FDC's DMA port
+	XOR	A
+	OUT0	(SAR0H),A
+	OUT0	(SAR0B),A	; Controlled by /DREQ0
+	RET
+
+;--------------------------------
+; Set up DMA Buffers for Output
+
+DMAOutput:
+	CALL	AbsAddr		; Get physical addr. for DMA
+	OUT0	(SAR0L),L
+	OUT0	(SAR0H),H
+	OUT0	(SAR0B),A	; Source pointers
+	LD	A,_DMA
+	OUT0	(DAR0L),A	; Destn.: FDC's DMA port
+	XOR	A
+	OUT0	(DAR0H),A
+	OUT0	(DAR0B),A	; Controlled by /DREQ0
+	RET
+
+;--------------------------------
+; Initiate a Read or Write Command
+
+Launch:	ex	(sp),iy		;Save IY, point at argts.
+	ld	a,e		;Find final sector for transfer
+	add	a,b
+	dec	a		;Last sector to do
+  ;; must remove this check for offset Sectors.  Sctrs/Trk is what we need
+  ;; in the DPB structure, not EOT as the offset is equated.		HFB
+;;	dec	a		;1 under final
+;;	cp	(ix+EOT)	;This MUST be < true final
+;;	jr	nc,bad1
+;;	inc	a		;True final sector
+	ld	h,a		;Save it
+ 
+	ld	a,(iy+opcode)
+	call	sendbyte	;Command code
+	ld	a,d		;Drive
+	bit	0,c		;Odd track (ie Side 1)?
+	jr	z,lc1
+	set	2,a
+lc1:	call	sendbyte	;Drive & head
+	ld	a,c
+	srl	a		;Cylinder
+	call	sendbyte
+	ld	a,c
+	and	1
+	call	sendbyte	;Head
+	ld	a,e
+	call	sendbyte	;Sector
+	ld	a,(ix+SECSZE)
+	call	sendbyte	;Sector length (encoded)
+	ld	a,h
+	call	sendbyte	;Final sector no.
+	ld	a,(ix+GPL)
+	call	sendbyte	;Gap length
+ 
+	ld	a,dma_run	;Activate DMA Ch-0
+	out0	(dstat),a
+ 
+	ld	a,0ffh		;Data transfer length (default)
+	call	sendbyte	;Final byte: FDC & DMA running
+ 
+	call	testresult	;Find out what happened
+	push	bc
+	push	af
+	ld	bc,skip
+	add	iy,bc		;Jump past the inline params.
+	pop	af
+	pop	bc
+	ex	(sp),iy		;Recover IY, post link
+	ret
+ 
+;--------------------------------
+; Determine Buffer Size (DMA Count Set)
+
+TranSze: push	hl
+	push	de
+	push	bc
+	ld	hl,64
+	ld	b,(ix+SECSZE)	;Size N, => 128*2^N
+	inc	b
+tz1:	add	hl,hl
+	djnz	tz1
+	ld	d,h
+	ld	e,l		;Sector size in DE
+	ld	hl,0
+	pop	bc		;No. of sectors in B
+	push	bc
+tz2:	add	hl,de		;Form total in HL
+	djnz	tz2
+	out0	(bcr0l),l	;Set DMA counter
+	out0	(bcr0h),h
+	ld	(blksze),hl	;Save block size
+ 
+	pop	bc
+	pop	de		;Restore regs.
+	pop	hl
+	ret
+ 
+;--------------------------------
+; Finish of a Seek/Recalibrate Function
+
+EndSeek: call	waitint		;Wait for it
+	ld	a,timeout
+	ret	c		;Timed out
+ 
+	ld	a,cmd_sense	;"Sense Interrupt" at the end
+	call	sendbyte
+	call	getbyte
+	ld	b,a		;ST0 in B
+	call	getbyte		;PCN in A
+ 
+	push	bc		;Verify correct cylinder
+	srl	c
+	cp	c		;Yes?
+	pop	bc
+	ld	a,sekerr
+	scf
+	ret	nz		;Quit if unequal
+ 
+	ld	a,b		;Get back ST0
+	and	0e0h
+	cp	20h		;Look for success
+	ret	z
+	ld	a,calerr
+	scf
+	ret			;CY=1 if it failed
+
+;--------------------------------
+; Prepare for a Read or Write Operation
+
+DORON	EQU	0CH		; Basic state: no drives, no reset, DMA
+
+Setup:	push	bc		;Save them...
+	push	hl
+ 
+	ld	b,d		;Drive no.
+	inc	b
+	ld	a,08h
+su1:	add	a,a
+	djnz	su1		;Shift drive bit as reqd.
+	ld	(mask),a	;Save drive indicator bit
+	ld	b,a		;Local copy
+ 
+	in0	a,(_DOR)
+	ld	c,a
+	and	0fch		;Kill select bits
+	or	d		;Select reqd. drive
+	or	DORON		;No reset, DMA
+	out0	(_DOR),a	;Selected
+ 
+	ld	a,c
+	and	b		;Is this drive running?
+	jr	nz,su2
+	in0	a,(_DOR)
+	or	b		;Start it up
+	out0	(_DOR),a
+ 
+; Wait for motor to run-up. NB this delay assumes:
+; 1. 16MHz CPU clock
+; 2. 2 wait states per memory access
+; 3. Z-80 instruction cycle-counts
+ 
+	ld      a,(ix+MTRON)    ;Start delay
+	LD	B,A		;;  (save)
+	IN0	A,(CCR)		;;
+	BIT	7,A		;; At Low CPU Speed?
+	LD	A,B		;;  (restore delay cnt)
+	JR	Z,mo0		;; ..jump if So
+	add	a,a	; Else Scale for inner loop
+mo0:	ld      bc,0    ; Prime for inner loop
+mo1:	djnz    mo1     ; 17*256 = 4352 clocks
+	dec     c       ;            6
+	jr      nz,mo1  ;           17
+			;         ----
+			;         4375 clocks
+			;        x 256
+			;      -------
+			;    1,120,000 clocks
+			; or, 1/16 second
+	dec     a
+	jr      nz,mo1  ;Full delay
+ 
+su2:			;Send the SPECIFY command (all from DPB)
+	ld      a,(ix+DRATE)
+	out0    (_CCR),a        ; Data rate as reqd.
+
+	ld      a,03h		; "Specify"
+	call    sendbyte   
+	LD	A,(NVRate)	;;
+	BIT	7,A		;; Valid Non-Volatile Configuration?
+	JR	NZ,su2A		;; ..jump if Not
+	LD	A,(nvRam2)	;; Else fetch timings byte (HLT/SRT)
+	AND	0FH		;;  keep only SRT
+	NEG			;;   make 2's complement
+	RLA			;; Move
+	RLA			;;  to
+	RLA			;;   high
+	RLA			;;    nibble
+	OR	0FH		;;     and add maximum HUT
+	CALL	sendbyte	;;
+	LD	A,(nvRam2)	;; fetch timings byte again for HLT
+	RRA			;; Move HLT
+	RRA			;;  down
+	RRA			;;   to count * 4
+	AND	1EH		;;    kill possible junk, Insure DMA bit=0
+	JR	su2B		;;   ..and jump to set
+
+su2A:	ld      a,(ix+SPEC_1)
+	call    sendbyte   
+	ld      a,(ix+SPEC_2)
+	res	0,a		;Be sure DMA is activated
+su2B:	call    sendbyte
+ 
+	ld	hl,calibd
+	ld	a,(mask)
+	and	(hl)		;Is this drive calibrated?
+	jr	nz,su3		;Done if so
+ 
+	ld	a,cmd_recal
+	call	sendbyte	;Send the "recal" command
+	ld	a,d
+	call	sendbyte	;Drive no.
+ 
+	call	endseek		;Finish the operation
+	jr	c,su5		;Jump if error
+	ld	a,(mask)
+	or	(hl)
+	ld	(hl),a		;Flag it calibrated, now
+su3:	xor	a		;Success...
+ 
+su5:	and	a		;Set the Z bit
+	pop	hl
+	pop	bc
+	ret			;Done: Z set if OK
+ 
+;======================================================================
+;		C O M M A N D   D E S P A T C H E R
+
+DiskOp:	CP	MAXCMD
+	JR	C,Do1
+	LD	A,BADCMD
+	SCF
+	RET			; Illegal command
+
+Do1:	CALL	Entry		; Enter the slave routine
+	PUSH	AF		; Save exit status
+	CALL	C,Reset		; If errors, reset the FDC
+	POP	AF
+	RET	C		; If error, take exit code
+	XOR	A		; If OK, return zero
+	RET			; Back to caller
+
+Entry:	PUSH	HL		; Save it
+	LD	HL,DTab
+	ADD	A,A		; Scale opcode by 2
+	ADD	A,L
+	LD	L,A		; Access the jumptable
+	JR	NC,Do2
+	INC	H		; Propagate carry
+
+Do2:	LD	A,(HL)		; Look into the table
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+
+	EX	(SP),HL		; Recover HL: routine ptr. on stack
+	RET			; Switch to routine
+
+;.....
+; Pointers to Function Routines
+
+DTab:	DW	Reset
+	DW	Motors
+	DW	XRead		; I/O functions: call wrappers
+	DW	XWrite
+	DW	XVerf
+	DW	XForm
+	DW	AbsAddr
+MAXCMD	 EQU  ($-DTab)/2	; No. of valid commands
+
+;======================================================================
+;	I / O   C O M M A N D   W R A P P E R   F U N C T I O N
+ 
+;   The READ, WRITE, VERIFY and FORMAT commands are essentially identical.
+; The despatcher calls a stub, which sets up a common wrapper to
+; run the required sub-function, and to implement re-tries in the
+; event of data errors.
+
+;   Wrapper stubs. The common tail is called with the user's HL stacked,
+; and HL pointing to the required sub-function.
+
+JPOPC	EQU	0C3H		; A "JP" opcode
+
+XRead:	PUSH	HL
+	LD	HL,Read		; Sub-function pointer
+	JR	ComTail
+
+XWrite:	PUSH	HL
+	LD	HL,Write
+	JR	ComTail
+
+XVerf:	PUSH	HL
+	LD	HL,Verify
+	JR	ComTail
+
+XForm:	PUSH	HL
+	LD	HL,Format
+
+ComTail:		; Common tail of the "wrapper" function
+	LD	(switch+1),HL	; Target for the despatcher
+	POP	HL		; Caller's value
+	PUSH	AF
+	LD	A,JPOPC
+	LD	(switch),A	; Complete the "JP" instruction
+ 
+	PUSH	HL
+	LD	HL,0
+	LD	(blksze),HL	; Default value
+	POP	HL
+ 
+	LD	A,TRIES
+Again:	LD	(rtcnt),A	; Retry counter
+	POP	AF
+ 
+	PUSH	HL
+	CALL	Switch		; To the sub-function
+	POP	HL		; Save HL (no others changed)
+ 
+	JR	NC,Ok		; Exit: no error
+	CP	IOERR		; Was it an IO error?
+	JR	Z,More
+	CP	SEKERR		; Or a seek error
+	JR	NZ,Fatal	; No: other errors are fatal
+
+More:	PUSH	AF		; Seek or IO errors: retry
+	CALL	UnCal		; Reset the "calibrated" bit
+	LD	A,(rtcnt)
+	DEC	A		; Count attempts
+	JR	NZ,Again	; More to go
+
+	POP	AF		; Exhausted: get the error code
+Fatal:	SCF			; Hard errors
+	LD	DE,restab	; Pass the result pointer
+	RET
+
+Ok:	LD	DE,(blksze)
+	ADD	HL,DE		; Success: index HL past block
+	LD	DE,restab	; Return DE -> status block
+	RET
+
+;-------------------------------
+; Common Stub for Sub-Functions to exit with error
+ 
+Fails:	SCF
+	RET
+
+;======================================================================
+;	R E S E T   T H E   D I S K E T T E   S Y S T E M
+
+Reset:	PUSH	HL
+	XOR	A
+	LD	(calibd),A	; All drives uncalibrated
+	OUT0	(_DOR),A	; Force reset
+	LD	A,DORON
+	OUT0	(_DOR),A	; All drives off (DMA asserted)
+	LD	HL,ConfigTab
+	CALL	SendCmdStrg	; "Configure"
+	XOR	A		; Post OK
+	POP	HL
+	RET
+
+ConfigTab:
+	DB	ECFT-$-1	; Length
+	DB	13H		; "Configure"
+	DB	00H		; Required
+	DB	71H		; No FIFO in use
+	DB	43		; Write precomp point
+ECFT	  EQU  $
+
+;======================================================================
+;	T U R N   O F F   A L L   D R I V E - M O T O R S
+
+;   This command is really only needed until interrups are supported,
+; since it is then possible to automatically turn off a drive which has
+; not been accessed for some time.
+;   This command is used by the elementary BIOS keyboard routine: the
+; drives are turned off if the system has waited for keyboard input
+; for too long - a simple method!
+
+Motors:	IN0	A,(_DOR)
+	AND	0FH		; Drop motor lines: keep selection
+	OUT0	(_DOR),A
+	XOR	A		; "Success"
+	RET
+
+;======================================================================
+;	R E A D   O N E   O R   M O R E   S E C T O R S
+
+Read:	CALL	Setup		; Drive selected & ready
+	JP	NZ,Fails
+
+	CALL	DMAInput	; Set up DMA pointers for input
+	CALL	TranSze		; Get total buffer size
+
+	LD	A,DMA_INCMD
+	OUT0	(DMODE),A	; DMA set up: IO => MEM
+
+	CALL	Launch		; Go fire it off
+	DB	CMD_READ		; Command code
+	DB	40H			; Expected ST0
+	DB	80H			; Expected ST1
+	RET			; CY=fault: HL -> result phase
+
+;======================================================================
+;	W R I T E   O N E   O R   M O R E   S E C T O R S
+
+Write:	CALL	Setup		; Drive selected & ready
+	JP	NZ,Fails
+
+	CALL	DMAOutput	; Set up DMA pointers for output
+	CALL	TranSze		; Get total buffer size
+
+	LD	A,DMA_OUTCMD
+	OUT0	(DMODE),A	; DMA set up: MEM => IO
+
+	CALL	Launch		; Go fire it off
+	DB	CMD_WRITE		; Command code
+	DB	40H			; Expected ST0
+	DB	80H			; Expected ST1
+	RET			; CY=fault: HL -> result phase
+
+;======================================================================
+;	V E R I F Y   S E C T O R S  -  N O   T R A N S F E R
+
+Verify:	CALL	Setup		; Drive selected & ready
+	JP	NZ,Fails
+
+	CALL	Launch		; Go fire it off
+	DB	CMD_VERIFY		; Command code
+	DB	0			; Expected ST0
+	DB	0			; Expected ST1
+	RET			; CY=fault: HL -> result phase
+
+;======================================================================
+;	F O R M A T   A   T R A C K   O F   T H E   D I S K E T T E
+
+Format:
+	  IFDEF  INCFORMAT	; Do we include FORMAT ?
+	CALL	Setup		; Drive running, & calibrated
+	JP	NZ,Fails
+
+	LD	A,CMD_SEEK	; Seek to the required track
+	CALL	SendByte	; We cannot use "implied seeks" here
+	LD	A,D
+	BIT	0,C
+	JR	Z,Fm1
+	SET	2,A		; A = drive & head bits
+Fm1:	CALL	SendByte
+	LD	A,C
+	SRL	A		; Cylinder no.
+	CALL	SendByte
+
+	CALL	EndSeek		; Wait for seek to complete
+	RET	C		; Failed
+
+	CALL	DMAOutput	; DMA pointers for output
+
+	PUSH	HL
+	LD	L,(IX+EOT)	; No. of sectors
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL		; 4 bytes/sector
+	OUT0	(BCR0L),L
+	OUT0	(BCR0H),H	; Set up DMA counter
+	LD	(blksze),HL
+	POP	HL
+
+	LD	A,DMA_OUTCMD
+	OUT0	(DMODE),A	; DMA armed to output
+
+	LD	A,CMD_FORMAT	; Now initiate the FDC
+	CALL	SendByte
+	LD	A,D
+	BIT	0,C
+	JR	Z,Fm2
+	SET	2,A		; Side select
+Fm2:	CALL	SendByte	; Drive & side
+	LD	A,(IX+SECSZE)
+	CALL	SendByte	; Sector size
+	LD	A,(IX+EOT)
+	CALL	SendByte	; Final sector no.
+	LD	A,(IX+GAPFMT)
+	CALL	SendByte	; Gap-3 length
+
+	LD	A,DMA_RUN
+	OUT0	(DSTAT),A	; Kick off the DMA
+
+	LD	A,(IX+DATFMT)
+	CALL	SendByte	; Last byte: FDC running
+
+	PUSH	IY
+	LD	IY,fmtres	; Expected results
+	CALL	TestResult	; Wait for it...
+	POP	IY
+
+	RET			; A and CY show result
+
+FmtRes:	DB	0		; Filler
+	DB	0		; ST-0
+	DB	0		; ST-1
+	  ELSE
+	JP	Fails		; No FORMAT command
+	  ENDIF
+
+;;======================================================================
+;;	 R E A D    D I S K    S E C T O R    I D    D A T A
+;; Enter: D = Disk Number (A=0, B=1, etc)
+;;	  IX -> DPB
+;; Exit : A = 0, Zero Set (Z), Carry Clear (NC) if ID Read Correctly
+;;	    Carry Set (C) if Timeout (Reg A and Zero Flag indeterminate)
+;;	    A <> 0, Zero Reset (NZ) if Error Reading ID (Carry indeterminate)
+
+ReadID:	CALL	Setup		;; Start Motors, Select, etc...
+	JP	NZ,Fails	;; ..signify Error on return if Bad
+	LD	A,CMD_RDID	;;
+	CALL	sendbyte	;; Command the Controller
+	LD	A,D		;;
+	CALL	sendbyte	;;  with Drive #
+	LD	IY,RIDres	;;    (check results with this)
+	CALL	TestResult	;;   get controller response
+	RET	C		;;  ..return Carry set if Timeout
+
+;; Return the Sector Size byte to help determine the Disk format
+
+	LD	HL,restab	;; The command results went here
+	LD	DE,6		;;
+	ADD	HL,DE		;;  offset to Sector size
+	LD	A,(HL)		;;   fetch
+	OR	A		;;    and insure Carry Clear
+	RET			;;
+
+RIDres:	DB	4AH		;; Command
+	DB	00		;; Expected St0
+	DB	00		;; Expected St1
+
+;======================================================================
+; C O N V E R T   L O G I C A L   T O   P H Y S I C A L   A D D R E S S
+ 
+;  This utility converts a logical address (in HL) to a 20-bit physical
+; address (in AHL). Other registers are unchanged. Absolute addresses
+; are used by the Z182 DMA.
+;  The routine accesses the memory-mapping hardware registers, to obtain
+; the current translations.
+ 
+	;NB This code assumes that CA1 > BA > CA0
+
+; Convert HL to AHL Address
+
+AbsAddr:
+	PUSH	HL
+	LD	A,H		; First, see which logical bank
+	AND	0F0H
+	LD	H,A		; Save 4kB page
+	IN0	A,(CBAR)
+	AND	0F0H		; CA1 logical base
+	LD	L,A
+	LD	A,H
+	SUB	L		; Form Addr - Base
+	JR	C,Not1		; .If CY: Addr < Base, so don't use
+	IN0     A,(CBR)		; It is CA1 - take base
+	JR	FdMode
+
+Not1:	IN0	A,(CBAR)
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A		; BA logical base in A[7:4]
+	LD	L,A
+	LD	A,H
+	SUB	L		; Form Addr - Base
+	LD	A,0
+	JR	C,FdMode	; Not BA, must be CA0
+	IN0     A,(BBR)		; Else, it is BA
+
+FdMode:	POP	HL		; Now do the adjustment
+	PUSH	BC		; Save it
+	PUSH	HL		; Save HL again
+	LD	C,H
+	LD	B,0		; BC = HL >> 8
+	LD	L,A
+	LD	H,B		; HL = physical base
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL		; HL = physical base << 4
+	ADD	HL,BC		; Top address in HL
+	LD	A,H
+	AND	0FH		; Bits 19:16 in A
+	LD	B,L		; Save bits 15:8
+	POP	HL
+	LD	H,B		; Full address in AHL
+	POP	BC      	; Restore BC
+	AND	A		;  CY=0 (ie no errors)
+	RET			; Done
+
+;- - - - - - - - End of DiskOp File - - - - - - - - -
+

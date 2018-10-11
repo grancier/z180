@@ -1,0 +1,2040 @@
+	PAGE	72
+;==============================================================;
+;                                                              ;
+;        TINY BASIC FOR THE D-X DESIGNS' P112 Z180 SBC         ;
+;                                                              ;
+;==============================================================;
+; This version of Tiny Basic is a port by Paul Akterstam for   ;
+; the D-X Designs' Z180-based P112 Single Board Computer of    ;
+; Sherry Bros. Tiny Basic V3.1, itself a port for CP/M of Li-  ;
+; Chen Wang's Palo Alto 8080 TINY BASIC, V1.0, dated 10 June   ;
+; 1976. Some bugs have been fixed and additions have been made ;
+; from Don McKenzie's Z8TBASIC, V2.0, dated 26 August 1993,    ;
+; also based on the Sherry Bros. version, and from Gordon      ;
+; Brandly's TBI68K, V1.2, a version of Tiny Basic for the      ;
+; Motorola 68000.                                              ;
+;                                                              ;
+; This program is contributed to the P112 software pool under  ;
+; the GNU License.                                             ;
+;                                                              ;
+;==============================================================;
+; This program is free software; you can redistribute it and/  ;
+; or modify it under the terms of the GNU General Public       ;
+; License as published by the Free Software Foundation;        ;
+; either version 2 of the License, or (at your option) any     ;
+; later version.                                               ;
+;                                                              ;
+; This program is distributed in the hope that it will be      ;
+; useful, but WITHOUT ANY WARRANTY; without even the implied   ;
+; warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR      ;
+; PURPOSE. See the GNU General Public License for more         ;
+; details.                                                     ;
+;                                                              ;
+; You should have received a copy of the GNU General Public    ;
+; License along with this program; if not, write to the Free   ;
+; Software Foundation, Inc., 675 Mass Ave, Cambridge,          ;
+; MA 02139, USA.                                               ;
+;                                                              ;
+;==============================================================;
+; Code converted from 8080 to Z80 mnemonics by Don McKenzie
+; Adapted for Zilog's ZMASM 2.10 DOS Cross Assembler. PA
+;
+; Revision history:
+; V0.1  08Jan99 First working version. Changed BYE to SYSTEM,
+;               # to <> and SIZE to FRE. Added ? (for PRINT),and
+;               ' (for REM). Restructured source code.
+; V0.11 08Jan99 Re-wrote INP and OUT commands using Z80 indirect
+;               instructions to make them ROMable.
+; V0.12 10Jan99 Fixed the WAIT command: K (in WAIT I,J,K) was
+;               hardcoded as 0, disabling the parameter.
+; V0.13 11Jan99 Fixed stack bug in WAIT command then re-wrote it
+;               in Z80 code to make it ROMable.
+; V0.14 14Jan99 Fixed USR offset (from Z8TBASIC).
+; V0.15 15Jan99 Removed CP/M disk handling code. Replaced JP
+;               with JR where possible.
+; V0.16 16Jan99 Added AND, OR, and XOR operators from Z8TBASIC.
+;               Changed text to mixed case. Changed OCSW to work
+;               on P112.
+; V0.17 21Jan99 Moved internal variables, msgs, etc to end of
+;               source.
+; V0.18 24Jan99 Added built-in USR functions (and hooks) for
+;               reading the P112 Real Time Clock (RTC).
+; V0.81 31Jan99 Corrected INPUT bug by changing most JRs back
+;               to JPs. Added USR functions DELAY and PRTIME.
+; V0.82 01Feb99 Added SHIFT LEFT & RIGHT from Z8TBASIC.
+; V0.83 02Feb99 Changed size of text save area.
+; V0.93 08Feb99 Fixed bug that kept 'PRINT:' from working.
+;               General clean-up of source comments.
+; V1.0  18Feb99 Added '$' PRINT modifier for terminal control
+;               (adapted from Gordon Brandly's TBI68K, v1.2).
+;               First released ROM version.
+;==============================================================
+; ASCII EQUATES
+CR	EQU	0DH
+LF	EQU	0AH
+CTRL_C	EQU	03H
+CTRL_O	EQU	0FH
+TIMARY	EQU	0FF2AH		; P112 V5b1 ROM Setup RTC buffer
+RDCLK	EQU	0252BH		; P112 V5b1 ROM Read RTC to TIMARY (RdClk)
+RTIME	EQU	0239FH		; P112 V5b1 ROM Print date/time (RTime)
+;
+;==============================================================
+; TINY BASIC IN RAM
+;	ORG	8000H		; Run in P112 RAM at 8000H
+;INTVAR	EQU	9000H		; Location of internal variables
+;ADJBT7	EQU	0H		; Clear bit 7 in address tables
+;MASKB7	EQU	0FFH		; All bits set
+;USROFF	EQU	80H		; Adjust usr jump addresses
+;
+;==============================================================
+; TINY BASIC IN ROM
+	ASEG
+	ORG	3000H		; Run in P112 ROM at 3000H
+INTVAR	EQU	9000H		; Location of internal variables
+ADJBT7	EQU	080H		; Set bit 7 in address tables
+MASKB7	EQU	07FH		; All bits set but highest
+USROFF	EQU	0H		; Adjust usr jump addresses
+;
+;==============================================================
+; HOOKS FOR START-UP, BUILT-IN USR SUBROUTINES ETC
+	JR	START		; Cold-start TINY BASIC
+	JR	RSTART		; Warm-start TINY BASIC
+USR01:	JP	GETIME		; Get 7 BCD's from RTC into timAry
+USR02:	JP	RDTIME		; Read one of 7 BCD's using offset
+USR03:	JP	PRTIME		; Print date/time string on screen
+USR04:	JP	DELAY		; Wait, with parameter for duration
+USR05:	JP	RSTART		; Vacant - dummy jump
+USR06:	JP	RSTART		; Vacant - dummy jump
+USR07:	JP	RSTART		; Vacant - dummy jump
+USR08:	JP	RSTART		; Vacant - dummy jump
+USR09:	JP	RSTART		; Vacant - dummy jump
+;
+;==============================================================
+;
+; *** MAIN ***
+;
+; This is the main loop that collects the TINY BASIC program
+; and stores it in the memory.
+;
+; At start, it prints out "(CR)OK(CR)", and initializes the
+; stack and some other internal variables.  Then it prompts
+; ">" and reads a line.  If the line starts with a non-zero
+; number, this number is the line number.  The line number
+; (in 16 bit binary) and the rest of the line (including CR)
+; is stored in the memory.  If a line with the same line
+; number is already there, it is replaced by the new one. If
+; the rest of the line consists of a CR only, it is not stored
+; and any existing line with the same line number is deleted.
+; 
+; After a line is inserted, replaced, or deleted, the program
+; loops back and ask for another line.  This loop will be
+; terminated when it reads a line with zero or no line
+; number, and control is transferred to "DIRECT".
+;
+; TINY BASIC program save area starts at the memory location
+; labeled "TXTBGN" and ends at "TXTEND".  We always fill this
+; area starting at "TXTBGN", the unfilled portion is pointed
+; to by the contents of the memory location labeled "TXTUNF".
+;
+; The memory location "CURRNT" points to the line number
+; that is currently being interpreted.  While we are in
+; this loop or while we are interpreting a direct command
+; (see next section), "CURRNT" should point to a 0.
+;
+;==============================================================
+; TINY BASIC COLD START
+;==============================================================
+START:	LD	SP,STACK	; Initialize stack pointer
+	LD	HL,TXTBGN	; TXTUNF->TXTBGN
+	LD	(TXTUNF),HL	;
+	LD	A,0FFH
+	LD	(OCSW),A	; Turn on output switch
+	LD	A,0CH		; Get form feed
+	CALL	OUTC		; Send to CRT
+	SUB	A		; Clear accumulator
+	LD	DE,MSG		; Get init message
+	CALL	PRTSTG		; Send it
+;==============================================================
+; TINY BASIC WARM START
+;==============================================================
+RSTART:	LD	SP,STACK	; Initialize SP again
+	CALL	CRLF		;  and jump to here
+	LD	DE,OK		; DE->String
+	SUB	A		; A=0
+	CALL	PRTSTG		; Print 'OK'
+	LD	HL,ST2+1	; Literal 0
+	LD	(CURRNT),HL	; CURRNT->Line # = 0
+ST2:	LD	HL,0
+	LD	(LOPVAR),HL
+	LD	(STKGOS),HL
+ST3:	LD	A,'>'		; Prompt '>' and
+	CALL	GETLN		;  read a line
+	PUSH	DE		; DE->End of line
+	LD	DE,BUFFER	; DE->Beginning of line
+	CALL	TSTNUM		; Test if it's a number
+	CALL	IGNBLK	
+	LD	A,H		; HL=Value of # or
+	OR	L		;  0 if no # was found
+	POP	BC		; BC->End of line
+	JP	Z,DIRECT
+	DEC	DE		; Backup DE and save
+	LD	A,H		; Value of line # there
+	LD	(DE),A
+	DEC	DE
+	LD	A,L
+	LD	(DE),A
+	PUSH	BC		; BC,DE->Begin, End
+	PUSH	DE
+	LD	A,C
+	SUB	E
+	PUSH	AF		; A=# of bytes in line
+	CALL	FNDLN		; Find this line in save
+	PUSH	DE		;  area, DE->Save area
+	JP	NZ,ST4		; NZ: Not found, insert
+	PUSH	DE		; Z: Found, delete it
+	CALL	FNDNXT		; Find next line
+				; DE->Next line
+	POP	BC		; BC->Line to be deleted
+	LD	HL,(TXTUNF)	; HL->Unfilled save area
+	CALL	MVUP		; Move up to delete
+	LD	H,B		; TXTUNF->Unfilled area
+	LD	L,C
+	LD	(TXTUNF),HL	; Update
+ST4:	POP	BC		; Get ready to insert
+	LD	HL,(TXTUNF)	;  but first check if
+	CALL	TERM		; From Z8TBASIC
+	POP	AF		;  the length of new line
+	PUSH	HL		;  is 3 (line # and CR)
+	CP	3		; Then do not insert
+	JP	Z,RSTART	; Must clear the stack
+	ADD	A,L		; Compute new TXTUNF
+	LD	L,A
+	LD	A,0
+	ADC	A,H
+	LD	H,A		; HL->New unfilled area
+	LD	DE,TXTEND	; Check to see if there
+	CALL	COMPAR		;  is enough space
+	JP	NC,QSORRY	; Sorry, no room for it
+	LD	(TXTUNF),HL	; Ok, update TXTUNF
+	POP	DE		; DE->Old unfilled area
+	CALL	MVDOWN
+	CALL	TERM		; Bug fix from Z8TBASIC
+	POP	DE		; DE->Begin, HL->End
+	POP	HL
+	CALL	MVUP		; Move new line to save
+	JP	ST3		;  area
+;
+; Bug fix from Z8TBASIC
+TERM:	PUSH	HL		;
+	LD	HL,(TXTUNF)	;
+	LD	(HL),0		; Delete chrs bug
+	INC	HL		; Must terminate with
+	LD	(HL),0		;  2 zeros (NULL line)
+	POP	HL		;
+	RET			;
+;
+TSTV:	CALL	IGNBLK		; *** TSTV OR RST 7 ***
+	SUB	40H		; Test variables
+	RET	C		; C: Not a variable
+	JP	NZ,TV1		; Not "@" array
+	INC	DE		; It is the "@" array
+	CALL	PARN		; @ should be followed
+	ADD	HL,HL		;  by (expr) as its index
+	JP	C,QHOW		; Is index too big?
+	PUSH	DE		; Will it overwrite
+	EX	DE,HL		; Text?
+	CALL	SIZE		; Find size of free
+	CALL	COMPAR		;  and check that
+	JP	C,ASORRY	; If so, say "OUT OF MEMORY"
+	LD	HL,VARBGN	; If not, get address
+	CALL	SUBDE		;  of @(expr) and put it
+	POP	DE		;  in HL
+	RET			; C flag is cleared
+TV1:	CP	1BH		; Not @, is it A to Z?
+	CCF			; If not return C flag
+	RET	C
+	INC	DE		; If A through Z
+	LD	HL,VARBGN	;  compute address of
+	RLCA			;  that variable and
+	ADD	A,L		;  return it in HL
+	LD	L,A		;  with C flag cleared
+	LD	A,0
+	ADC	A,H
+	LD	H,A
+	RET
+;
+COMPAR:	LD	A,H		; *** COMP OR RST 4 ***
+	CP	D		; Compare HL with DE
+	RET	NZ		; Return correct C and
+	LD	A,L		;  Z flags
+	CP	E		;  but old A is lost
+	RET
+;
+IGNBLK:	LD	A,(DE)		; *** IGNBLK/RST 5 ***
+	CP	20H		; Ignore blanks
+	RET	NZ		;  in text (where DE->)
+	INC	DE		;  and return the first
+	JP	IGNBLK		;  non-blank char. in A
+;
+TSTC:	EX	(SP),HL		; *** TSTC OR RST 1 ***
+	CALL	IGNBLK		; Ignore blanks and
+	CP	(HL)		;  test character
+	INC	HL		; Compare the byte that
+	JP	Z,TC2		;  follows the RST inst.
+	PUSH	BC		;  with the text (DE->)
+	LD	C,(HL)		; If not =, add the 2nd
+	LD	B,0		;  byte that follows the
+	ADD	HL,BC		;  RST to the old pc
+	POP	BC		;  i.e., do a relative
+	DEC	DE		;  jump if not =
+TC2:	INC	DE		; If =, skip those bytes
+	INC	HL		;  and continue
+	EX	(SP),HL
+	RET
+;
+TSTNUM:	LD	HL,0		; *** TSTNUM ***
+	LD	B,H		; Test if the text is
+	CALL	IGNBLK		;  a number
+TN1:	CP	30H		; If not, return 0 in
+	RET	C		;  B and HL
+	CP	3AH		; If numbers, convert
+	RET	NC		;  to binary in HL and
+	LD	A,0F0H		;  set A to # of digits
+	AND	H		; If H>0FFH, there is no
+	JP	NZ,QHOW		;  room for next digit
+	INC	B		; B counts # of digits
+	PUSH	BC
+	LD	B,H		; HL=10;*HL+(New digit)
+	LD	C,L
+	ADD	HL,HL		; Where 10;* is done by
+	ADD	HL,HL		;  shift and add
+	ADD	HL,BC
+	ADD	HL,HL
+	LD	A,(DE)		;  and (digit) is from
+	INC	DE		;  stripping the ASCII
+	AND	0FH		;  code
+	ADD	A,L
+	LD	L,A
+	LD	A,0
+	ADC	A,H
+	LD	H,A
+	POP	BC
+	LD	A,(DE)		; Do this digit after
+	JP	P,TN1		; Digit. S says overflow
+QHOW:	PUSH	DE		; *** ERROR: "OUT OF RANGE" ***
+AHOW:	LD	DE,HOW
+	JP	ERROR
+;
+;==============================================================
+; 
+; *** TABLES *** DIRECT *** & EXEC ***
+; 
+; This section of the code tests a string against a table.
+; When a match is found, control is transferred to the section
+; of code according to the table.
+;
+; At 'EXEC', DE should point to the string and HL should point
+; to the TABLE-1.  At 'DIRECT', DE should point to the string,
+; HL will be set up to point to TAB1-1, which is the table of
+; all direct and statement commands.
+;
+; A '.' in the string will terminate the test and the partial
+; match will be considered as a match.  e.g., 'P.', 'PR.',
+; 'PRI.', 'PRIN.', or 'PRINT' will all match 'PRINT'.
+;
+; The table consists of any number of items.  Each item
+; is a string of characters with bit 7 set to 0 and
+; a jump address stored hi-low with bit 7 of the high
+; byte set to 1.
+;
+; End of table is an item with a jump address only.  If the
+; string does not match any of the other items, it will
+; match this null item as default.
+;
+TAB1	EQU	$		; Direct Commands
+	DB	"LIST"
+	DB	HIGH LIST + ADJBT7,LOW LIST
+	DB	"RUN"
+	DB	HIGH RUN + ADJBT7,LOW RUN
+	DB	"NEW"
+	DB	HIGH NEW + ADJBT7,LOW NEW
+	DB	"SYSTEM"	; Exit to host OS
+	DB	HIGH SYSTEM + ADJBT7,LOW SYSTEM
+;
+TAB2	EQU	$		; Direct/Statement
+	DB	"NEXT"
+	DB	HIGH NEXT + ADJBT7,LOW NEXT
+	DB	"LET"
+	DB	HIGH LET + ADJBT7,LOW LET
+	DB	"OUT"
+	DB	HIGH OUTCMD + ADJBT7,LOW OUTCMD
+	DB	"POKE"
+	DB	HIGH POKE + ADJBT7,LOW POKE
+	DB	"WAIT"
+	DB	HIGH WAITCM + ADJBT7,LOW WAITCM
+	DB	"IF"
+	DB	HIGH IFF + ADJBT7,LOW IFF
+	DB	"GOTO"
+	DB	HIGH GOTO + ADJBT7,LOW GOTO
+	DB	"GOSUB"
+	DB	HIGH GOSUB + ADJBT7,LOW GOSUB
+	DB	"RETURN"
+	DB	HIGH RETURN + ADJBT7,LOW RETURN
+	DB	27H		; Added
+	DB	HIGH REM + ADJBT7,LOW REM
+	DB	"REM"
+	DB	HIGH REM + ADJBT7,LOW REM
+	DB	"FOR"
+	DB	HIGH FOR + ADJBT7,LOW FOR
+	DB	"INPUT"
+	DB	HIGH INPUT + ADJBT7,LOW INPUT
+	DB	"?"		; Added
+	DB	HIGH PRINT + ADJBT7,LOW PRINT
+	DB	"PRINT"
+	DB	HIGH PRINT + ADJBT7,LOW PRINT
+	DB	"STOP"
+	DB	HIGH STOP + ADJBT7, LOW STOP
+	DB	HIGH DEFLT + ADJBT7,LOW DEFLT
+	DB	"YOU CAN ADD MORE" ; commands but
+				   ; remember to move default down.
+;
+TAB4	EQU	$		; Functions
+	DB	"RND"
+	DB	HIGH RND + ADJBT7,LOW RND
+	DB	"INP"
+	DB	HIGH INP + ADJBT7,LOW INP
+	DB	"PEEK"
+	DB	HIGH PEEK + ADJBT7,LOW PEEK
+	DB	"USR"
+	DB	HIGH USR + ADJBT7,LOW USR
+	DB	"ABS"
+	DB	HIGH ABS + ADJBT7,LOW ABS
+	DB	"FRE"
+	DB	HIGH SIZE + ADJBT7,LOW SIZE
+	DB	HIGH XP40 + ADJBT7,LOW XP40
+	DB	"YOU CAN ADD MORE" ; functions but remember
+				   ; to move XP40 down
+;
+TAB5	EQU	$		; "TO" in "FOR"
+	DB	"TO"
+	DB	HIGH FR1 + ADJBT7,LOW FR1
+	DB	HIGH QWHAT + ADJBT7,LOW QWHAT
+;
+TAB6	EQU	$		; "STEP" in "FOR"
+	DB	"STEP"
+	DB	HIGH FR2 + ADJBT7,LOW FR2
+	DB	HIGH FR3 + ADJBT7,LOW FR3
+;
+TAB8	EQU	$		; Relation Operators
+	DB	">="
+	DB	HIGH XP11 + ADJBT7,LOW XP11
+	DB	"<>"		; Changed from #
+	DB	HIGH XP12 + ADJBT7,LOW XP12
+	DB	">"
+	DB	HIGH XP13 + ADJBT7,LOW XP13
+	DB	"="
+	DB	HIGH XP15 + ADJBT7,LOW XP15
+	DB	"<="
+	DB	HIGH XP14 + ADJBT7,LOW XP14
+	DB	"<"
+	DB	HIGH XP16 + ADJBT7,LOW XP16
+	DB	HIGH XP17 + ADJBT7,LOW XP17
+;
+DIRECT:	LD	HL,TAB1-1	; *** DIRECT ***
+;
+EXEC	EQU	$		; *** EXEC ***
+EX0:	CALL	IGNBLK		; Ignore leading blanks
+	PUSH	DE		; Save pointer
+EX1:	LD	A,(DE)		;  if found '.' in string
+	INC	DE		;  before any mismatch
+	CP	2EH		; We declare a match
+	JP	Z,EX3
+	INC	HL		; HL->Table
+	CP	(HL)		; If match, test next
+	JP	Z,EX1
+	LD	A,7FH		;  else, see if bit 7
+	DEC	DE		;  of table is set, which
+	CP	(HL)		;  is the jump addr. (HI)
+	JP	C,EX5		; C: Yes, matched
+EX2:	INC	HL		; NC: No, find jump addr.
+	CP	(HL)
+	JP	NC,EX2
+	INC	HL		; Bump to next tab. item
+	POP	DE		; Restore string pointer
+	JP	EX0		; Test against next item
+EX3:	LD	A,7FH		; Partial match, find
+EX4:	INC	HL		;  jump addr., which is
+	CP	(HL)		;  flagged by bit 7
+	JP	NC,EX4
+EX5:	LD	A,(HL)		; Load HL with the jump
+	INC	HL		;  address from the table
+	LD	L,(HL)
+;	AND	7FH		; Mask off bit 7
+	AND	MASKB7		; Mask off bit 7
+	LD	H,A
+	POP	AF		; Clean up the garbage
+	JP	(HL)		;  and we go do it
+; 
+;==============================================================
+; 
+; What follows is the code to execute direct and statement
+; commands.  Control is transferred to these points via the
+; command table lookup code of 'DIRECT' and 'EXEC' in last
+; section.  After the command is executed, control is
+; transferred to other sections as follows:
+;
+; For 'LIST', 'NEW', and 'STOP': go back to 'RSTART'
+; For 'RUN': go execute the first stored line if any; else
+; go back to 'RSTART'.
+; For 'GOTO' and 'GOSUB': go execute the target line.
+; For 'RETURN' and 'NEXT': go back to saved return line.
+; For all others: if 'CURRNT' -> 0, go to 'RSTART', else
+; go execute next command.  (This is done in 'FINISH'.)
+;
+;==============================================================
+; 
+; *** NEW *** STOP *** RUN (& FRIENDS) *** & GOTO *** 
+; 
+; 'NEW(CR)' sets 'TXTUNF' to point to 'TXTBGN'
+; 
+; 'STOP(CR)' goes back to 'RSTART'
+; 
+; 'RUN(CR)' finds the first stored line, stores its address (in
+; 'CURRNT'), and starts to execute it.  Note that only those
+; commands in tab2 are legal for stored program.
+; 
+; There are 3 more entries in 'RUN':
+; 'RUNNXL' finds next line, stores its addr. and executes it.
+; 'RUNTSL' stores the address of this line and executes it.
+; 'RUNSML' continues the execution on same line.
+; 'GOTO EXPR(CR)' evaluates the expression, finds the target
+; line, and jumps to 'RUNTSL' to do it.
+; 
+NEW:	CALL	ENDCHK		; *** NEW(CR) ***
+	LD	HL,TXTBGN
+	LD	(TXTUNF),HL
+; 
+STOP:	CALL	ENDCHK		; *** STOP(CR) ***
+	JP	RSTART
+; 
+RUN:	CALL	ENDCHK		; *** RUN(CR) ***
+	LD	DE,TXTBGN	; First saved line
+; 
+RUNNXL:	LD	HL,0		; *** RUNNXL ***
+	CALL	FNDLNP		; Find whatever line #
+	JP	C,RSTART	; C: Passed TXTUNF, quit
+; 
+RUNTSL:	EX	DE,HL		; *** RUNTSL ***
+	LD	(CURRNT),HL	; Set 'CURRNT'->line #
+	EX	DE,HL
+	INC	DE		; Bump pass line #
+	INC	DE
+; 
+RUNSML:	CALL	CHKIO		; *** RUNSML ***
+	LD	HL,TAB2-1	; Find command in tab2
+	JP	EXEC		;  and execute it
+; 
+GOTO:	CALL	EXPR		; *** GOTO EXPR ***
+	PUSH	DE		; Save for error routine
+	CALL	ENDCHK		; Must find a CR
+	CALL	FNDLN		; Find the target line
+	JP	NZ,AHOW		; No such line #
+	POP	AF		; Clear the "PUSH DE"
+	JP	RUNTSL		; Go do it
+; 
+;==============================================================
+; 
+; *** LIST *** & PRINT ***
+; 
+; LIST has two forms:
+; 'LIST(CR)' lists all saved lines
+; 'LIST #(CR)' start list at this line #
+; You can stop the listing by CONTROL-C key
+;
+; Print command is 'PRINT ....:' or 'PRINT ....(CR)'
+; where '....' is a list of expressions, formats, back-
+; arrows, dollar-signs and strings.  These items are separated
+; by commas.
+;
+; A format is a pound sign (#) followed by a number.  It
+; controls the number of spaces the value of a expression is
+; going to be printed.  It stays effective for the rest of
+; the PRINT command unless changed by another format.  If no
+; format is specified, 6 positions will be used.
+;
+; A string is quoted in a pair of single quotes or a pair of
+; double quotes.
+;
+; A back-arrow means generate a (CR) without (LF)
+;
+; A '$' means evaluate the expression and send the value to
+; the terminal as control characters.
+;
+; A (CRLF) is generated after the entire list has been
+; printed or if the list is a null list.  However if the list
+; ends with a comma, no (CRLF) is generated.
+;
+LIST:	CALL	TSTNUM		; Test if there is a #
+	CALL	ENDCHK		; If not # we get a 0
+	CALL	FNDLN		; Find this or next line
+LS1:	JP	C,RSTART	; C: Passed TXTUNF
+	CALL	PRTLN		; Print the line
+	CALL	CHKIO		; Stop if hit CONTROL-C
+	CALL	FNDLNP		; Find next line
+	JP	LS1		;  and loop back
+; 
+PRINT:	LD	C,6		; C = # of spaces
+	CALL	TSTC		; If null list & ":"
+	DB	':'		;
+	DB	PR2-1-$		;
+	CALL	CRLF		; Give CR-LF and
+	JP	RUNSML		;  continue same line
+PR2:	CALL	TSTC		; If null list (CR)
+	DB	CR		;
+	DB	PR0-1-$		;
+	CALL	CRLF		; Also give CR-LF and
+	JP	RUNNXL		;  go to next line
+PR0:	CALL	TSTC		;  else is it format?
+	DB	"#"
+	DB	PR9-1-$		;
+	CALL	EXPR		;  yes, evaluate expr.
+	LD	C,L		;  and save it in C
+	JP	PR3		; Look for more to print
+;
+; Added '$' print term, adapted from TBI68K
+PR9:	CALL	TSTC		;  else control characters?
+	DB	"$"		;
+	DB	PR1-1-$		;
+	CALL	EXPR		;  yes, evaluate expr.
+	LD	A,L		;  copy into A
+	CALL	OUTC		;  and send to CRT
+	JP	PR3		; Look for more to print
+PR1:	CALL	QTSTG		;  or is it a string?
+	JP	PR8		; If not, must be expr.
+PR3:	CALL	TSTC		; If ",", go find next
+	DB	","
+	DB	PR6-1-$		;
+	CALL	FIN		; In the list.
+	JP	PR0		; List continues
+PR6:	CALL	CRLF		; List ends
+	CALL	FINISH
+PR8:	CALL	EXPR		; Evaluate the expr
+	PUSH	BC
+	CALL	PRTNUM		; Print the value
+	POP	BC
+	JP	PR3		; More to print?
+; 
+;==============================================================
+; 
+; *** GOSUB *** & RETURN ***
+; 
+; 'GOSUB EXPR;' or 'GOSUB EXPR (CR)' is like the 'GOTO'
+; command, except that the current text pointer, stack pointer
+; etc. are saved so that execution can be continued after the
+; subroutine 'RETURN'.  In order that 'GOSUB' can be nested
+; (and even recursive), the save area must be stacked.
+; The stack pointer is saved in 'STKGOS'. The old 'STKGOS' is
+; saved in the stack.  If we are in the main routine, 'STKGOS'
+; is zero (this was done by the "main" section of the code),
+; but we still save it as a flag for no further 'RETURN's.
+;
+; 'RETURN(CR)' undoes everything that 'GOSUB' did, and thus
+; returns the execution to the command after the most recent
+; 'GOSUB'.  if 'STKGOS' is zero, it indicates that we
+; never had a 'GOSUB' and is thus an error.
+;
+GOSUB:	CALL	PUSHA		; Save the current "FOR"
+	CALL	EXPR		;  parameters
+	PUSH	DE		;  and text pointer
+	CALL	FNDLN		; Find the target line
+	JP	NZ,AHOW		; Not there. say "OUT OF RANGE"
+	LD	HL,(CURRNT)	; Found it, save old
+	PUSH	HL		;  'CURRNT' old 'STKGOS'
+	LD	HL,(STKGOS)
+	PUSH	HL
+	LD	HL,0		;  and load new ones
+	LD	(LOPVAR),HL
+	ADD	HL,SP
+	LD	(STKGOS),HL
+	JP	RUNTSL		;  then run that line
+RETURN:	CALL	ENDCHK		; There must be a CR
+	LD	HL,(STKGOS)	; Old stack pointer
+	LD	A,H		; 0 means not exist
+	OR	L
+	JP	Z,QWHAT		;  so, we say: "SYNTAX ERROR"
+	LD	SP,HL		;  else, restore it
+	POP	HL
+	LD	(STKGOS),HL	;  and the old 'STKGOS'
+	POP	HL
+	LD	(CURRNT),HL	;  and the old 'CURRNT'
+	POP	DE		; Old text pointer
+	CALL	POPA		; Old "FOR" parameters
+	CALL	FINISH		;  and we are back home
+; 
+;==============================================================
+; 
+; *** FOR *** & NEXT ***
+; 
+; 'FOR' has two forms:
+; 'FOR VAR=EXP1 TO EXP2 STEP EXP1' and 'FOR VAR=EXP1 TO EXP2'
+; the second form means the same thing as the first form with
+; EXP1=1.  (i.e., with a step of +1.)
+; TBI will find the variable VAR. and set its value to the
+; current value of EXP1.  It also evaluates EXPR2 and EXP1
+; and saves all these together with the text pointer etc. in
+; the 'FOR' save area, which consists of 'LOPVAR', 'LOPINC',
+; 'LOPLMT', 'LOPLN', and 'LOPPT'.  If there is already some-
+; thing in the save area (this is indicated by a non-zero
+; 'LOPVAR'), then the old save area is saved in the stack
+; before the new one overwrites it.
+; TBI will then dig in the stack and find out if this same
+; variable was used in another currently active 'FOR' loop.
+; If that is the case then the old 'FOR' loop is deactivated.
+; (purged from the stack..)
+;
+; 'NEXT VAR' serves as the logical (not necessarily physical)
+; end of the 'FOR' loop.  The control variable VAR. is checked
+; with the 'LOPVAR'.  If they are not the same, TBI digs in
+; the stack to find the right one and purges all those that
+; do not match.  Either way, TBI then adds the 'STEP' to
+; that variable and checks the result with the limit.  If it
+; is within the limit, control loops back to the command
+; following the 'FOR'.  If outside the limit, the save area
+; is purged and execution continues.
+;
+FOR:	CALL	PUSHA		; Save the old save area
+	CALL	SETVAL		; Set the control var.
+	DEC	HL		; HL is its address
+	LD	(LOPVAR),HL	; Save that
+	LD	HL,TAB5-1	; Use 'EXEC' to look
+	JP	EXEC		;  for the word 'TO'
+FR1:	CALL	EXPR		; Evaluate the limit
+	LD	(LOPLMT),HL	; Save that
+	LD	HL,TAB6-1	; Use 'EXEC' to look
+	JP	EXEC		;  for the word 'STEP'
+FR2:	CALL	EXPR		; Found it, get step
+	JP	FR4
+FR3:	LD	HL,1H		; Not found, set to 1
+FR4:	LD	(LOPINC),HL	; Save that too
+	LD	HL,(CURRNT)	; Save current line #
+	LD	(LOPLN),HL
+	EX	DE,HL		;  and text pointer
+	LD	(LOPPT),HL
+	LD	BC,0AH		; Dig into stack to
+	LD	HL,(LOPVAR)	;  find 'LOPVAR'
+	EX	DE,HL
+	LD	H,B
+	LD	L,B		; HL=0 now
+	ADD	HL,SP		; Here is the stack
+	DB	'>'		;
+FR7:	ADD	HL,BC		; Each level is 10 deep
+	LD	A,(HL)		; Get that old 'LOPVAR'
+	INC	HL
+	OR	(HL)
+	JP	Z,FR8		; 0 says no more in it
+	LD	A,(HL)
+	DEC	HL
+	CP	D		; Same as this one?
+	JP	NZ,FR7
+	LD	A,(HL)		; The other half?
+	CP	E
+	JP	NZ,FR7
+	EX	DE,HL		; Yes, found one
+	LD	HL,0H
+	ADD	HL,SP		; Try to move SP
+	LD	B,H
+	LD	C,L
+	LD	HL,0AH
+	ADD	HL,DE
+	CALL	MVDOWN		;  and purge 10 words
+	LD	SP,HL		;  in the stack
+FR8:	LD	HL,(LOPPT)	; Job done, restore DE
+	EX	DE,HL
+	CALL	FINISH		; and continue
+; 
+NEXT:	CALL	TSTV		; Get address of var.
+	JP	C,QWHAT		; No variable, "SYNTAX ERROR"
+	LD	(VARNXT),HL	; Yes, save it
+NX0:	PUSH	DE		; Save text pointer
+	EX	DE,HL
+	LD	HL,(LOPVAR)	; Get var. in 'FOR'
+	LD	A,H
+	OR	L		; 0 says never had one
+	JP	Z,AWHAT		;  so we say: "SYNTAX ERROR"
+	CALL	COMPAR		;  else we check them
+	JP	Z,NX3		; Ok, they agree
+	POP	DE		; No, let's see
+	CALL	POPA		; Purge current loop
+	LD	HL,(VARNXT)	;  and pop one level
+	JP	NX0		; Go check again
+NX3:	LD	E,(HL)		; Come here when agreed
+	INC	HL
+	LD	D,(HL)		; DE=value of var.
+	LD	HL,(LOPINC)
+	PUSH	HL
+	ADD	HL,DE		; Add one step
+	EX	DE,HL
+	LD	HL,(LOPVAR)	; Put it back
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	LD	HL,(LOPLMT)	; HL->limit
+	POP	AF		; Old HL
+	OR	A
+	JP	P,NX1		; Step > 0
+	EX	DE,HL
+NX1:	CALL	CKHLDE		; Compare with limit
+	POP	DE		; Restore text pointer
+	JP	C,NX2		; Outside limit
+	LD	HL,(LOPLN)	; Within limit, go
+	LD	(CURRNT),HL	;  back to the saved
+	LD	HL,(LOPPT)	;  'CURRNT' and text
+	EX	DE,HL		;  pointer
+	CALL	FINISH
+NX2:	CALL	POPA		; Purge this loop
+	CALL	FINISH
+; 
+;==============================================================
+; 
+; *** REM *** IFF *** INPUT *** & LET (& DEFLT) ***
+; 
+; 'REM' can be followed by anything and is ignored by TBI.
+; TBI treats it like an 'IF' with a false condition.
+;
+; 'IF' is followed by an expr. as a condition and one or more
+; commands (including other 'IF's) separated by colons.
+; note that the word 'THEN' is not used.  TBI evaluates the
+; expr. if it is non-zero, execution continues.  If the
+; expr. is zero, the commands that follow are ignored and
+; execution continues at the next line.
+;
+; 'INPUT' command is like the 'PRINT' command, and is followed
+; by a list of items.  If the item is a string in single or
+; double quotes, or is a back-arrow, it has the same effect as
+; in 'PRINT'.  If an item is a variable, this variable name is
+; printed out followed by a colon.  Then TBI waits for an
+; expr. to be typed in.  The variable is then set to the
+; value of this expr.  If the variable is proceeded by a string
+; (again in single or double quotes), the string will be
+; printed followed by a colon.  TBI then waits for input expr.
+; and set the variable to the value of the expr.
+;
+; If the input expr. is invalid, TBI will print "SYNTAX ERROR",
+; "OUT OF RANGE" or "OUT OF MEMORY" and reprint the prompt and
+; redo the input. The execution will not terminate unless you
+; type CONTROL-C. This is handled in 'INPERR'.
+;
+; 'LET' is followed by a list of items separated by commas.
+; Each item consists of a variable, an equal sign, and an expr.
+; TBI evaluates the expr. and sets the variable to that value.
+; TBI will also handle 'LET' command without the word 'LET'.
+; this is done by 'DEFLT'.
+;
+REM:	LD	HL,0H		; *** REM ***
+	DB	'>'		;
+; 
+IFF:	CALL	EXPR		; *** IFF ***
+	LD	A,H		; Is the expr.=0?
+	OR	L
+	JP	NZ,RUNSML	; No, continue
+	CALL	FNDSKP		; Yes, skip rest of line
+	JP	NC,RUNTSL
+	JP	RSTART
+; 
+INPERR:	LD	HL,(STKINP)	; *** INPERR ***
+	LD	SP,HL		; Restore old SP
+	POP	HL		;  and old 'CURRNT'
+	LD	(CURRNT),HL
+	POP	DE		;  and old text pointer
+	POP	DE		; Redo input
+; 
+INPUT	EQU	$		; *** INPUT ***
+IP1:	PUSH	DE		; Save in case of error
+	CALL	QTSTG		; Is next item a string?
+	JP	IP2		; No
+	CALL	TSTV		; Yes. But followed by a
+	JP	C,IP4		;  variable?   No.
+	JP	IP3		; Yes.  Input variable
+IP2:	PUSH	DE		; Save for 'PRTSTG'
+	CALL	TSTV		; Must be variable now
+	JP	C,QWHAT		; It is not? Then "SYNTAX ERROR"
+	LD	A,(DE)		; Get ready for 'RTSTG'
+	LD	C,A
+	SUB	A
+	LD	(DE),A
+	POP	DE
+	CALL	PRTSTG		; Print string as prompt
+	LD	A,C		; Restore text
+	DEC	DE
+	LD	(DE),A
+IP3:	PUSH	DE		; Save in case of error
+	EX	DE,HL
+	LD	HL,(CURRNT)	; Also save 'CURRNT'
+	PUSH	HL
+	LD	HL,IP1		; A negative number
+	LD	(CURRNT),HL	; As a flag
+	LD	HL,0H		; Save SP too
+	ADD	HL,SP
+	LD	(STKINP),HL
+	PUSH	DE		; Old HL
+	LD	A,3AH		; Print this too
+	CALL	GETLN		;  and get a line
+	LD	DE,BUFFER	; Points to buffer
+	CALL	EXPR		; Evaluate input
+	POP	DE		; Ok, get old HL
+	EX	DE,HL
+	LD	(HL),E		; Save value in var.
+	INC	HL
+	LD	(HL),D
+	POP	HL		; Get old 'CURRNT'
+	LD	(CURRNT),HL
+	POP	DE		;  and old text pointer
+IP4:	POP	AF		; Purge junk in stack
+	CALL	TSTC		; Is next char. ','?
+	DB	","
+	DB	IP5-1-$		;
+	JP	IP1		; Yes, more items.
+IP5:	CALL	FINISH
+; 
+DEFLT:	LD	A,(DE)		; *** DEFLT ***
+	CP	CR		; Empty line is OK
+	JP	Z,LT1		; Else it is 'LET'
+; 
+LET:	CALL	SETVAL		; *** LET ***
+	CALL	TSTC		; Set value to var.
+	DB	","
+	DB	LT1-1-$		;
+	JP	LET		; Item by item
+LT1:	CALL	FINISH		;  until finish
+; 
+;==============================================================
+; 
+; *** EXPR ***
+; 
+; 'EXPR' evaluates arithmetical or logical expressions.
+; <EXPR>::=<EXPR2>
+;          <EXPR2><REL.OP.><EXPR2>
+; where <REL.OP.> is one of the operators in TAB8 and the
+; result of these operations is 1 if true and 0 if false.
+; <EXPR2>::=(+ OR -)<EXPR3>(+ OR -<EXPR3>)(....)
+; where () are optional and (....) are optional repeats.
+; <EXPR3>::=<EXPR4>(<* OR /><EXPR4>)(....)
+; <EXPR4>::=<VARIABLE>
+;           <FUNCTION>
+;           (<EXPR>)
+; <EXPR> is recursive so that variable '@' can have an <EXPR>
+; as index, functions can have an <EXPR> as arguments, and
+; <EXPR4> can be an <EXPR> in parenthesis.
+;
+EXPR:	CALL	EXPR2		; *** EXPR OR RST 3 ***
+	PUSH	HL		; Evaluate an expression
+	LD	HL,TAB8-1	; Lookup rel.op.
+	JP	EXEC		; Go do it
+XP11:	CALL	XP18		; Rel.op.">="
+	RET	C		; No, return HL=0
+	LD	L,A		; Yes, return HL=1
+	RET
+XP12:	CALL	XP18		; Rel.op."<>"
+	RET	Z		; False, return HL=0
+	LD	L,A		; True, return HL=1
+	RET
+XP13:	CALL	XP18		; Rel.op.">"
+	RET	Z		; False
+	RET	C		; Also false, HL=0
+	LD	L,A		; True, HL=1
+	RET
+XP14:	CALL	XP18		; Rel.op."<="
+	LD	L,A		; Set HL=1
+	RET	Z		; Rel. true, return
+	RET	C
+	LD	L,H		; Else set HL=0
+	RET
+XP15:	CALL	XP18		; rel.op."="
+	RET	NZ		; False, return HL=0
+	LD	L,A		; Else set HL=1
+	RET
+XP16:	CALL	XP18		; Rel.op."<"
+	RET	NC		; False, return HL=0
+	LD	L,A		; Else set HL=1
+	RET
+XP17:	POP	HL		; Not rel.op.
+	RET			; Return HL=<EXPR2>
+XP18:	LD	A,C		; Subroutine for all
+	POP	HL		; Rel.op.'s
+	POP	BC
+	PUSH	HL		; Reverse top of stack
+	PUSH	BC
+	LD	C,A
+	CALL	EXPR2		; Get 2nd <EXPR2>
+	EX	DE,HL		; Value in DE now
+	EX	(SP),HL		; 1st <EXPR2> in HL
+	CALL	CKHLDE		; Compare 1st with 2nd
+	POP	DE		; Restore text pointer
+	LD	HL,0H		; Set HL=0, A=1
+	LD	A,1
+	RET
+; 
+EXPR2:	CALL	TSTC		; Negative sign?
+	DB	"-"
+	DB	XP21-1-$	;
+	LD	HL,0H		; Yes, fake '0-'
+	JP	XP26		; Treat like subtract
+XP21:	CALL	TSTC		; Positive sign?  Ignore
+	DB	"+"
+	DB	XP22-1-$	;
+XP22:	CALL	EXPR3		; 1st <EXPR3>
+XP23:	CALL	TSTC		; Add?
+	DB	"+"
+	DB	XP25-1-$	;
+	PUSH	HL		; Yes, save value
+	CALL	EXPR3		; Get 2nd<EXPR3>
+XP24:	EX	DE,HL		; 2nd in DE
+	EX	(SP),HL		; 1st in HL
+	LD	A,H		; Compare sign
+	XOR	D
+	LD	A,D
+	ADD	HL,DE
+	POP	DE		; Restore text pointer
+	JP	M,XP23		; 1st 2nd sign differ
+	XOR	H		; 1st 2nd sign equal
+	JP	P,XP23		; So is result
+	JP	QHOW		; Else we have overflow
+XP25:	CALL	TSTC		; Subtract?
+	DB	"-"
+	DB	XP42-1-$	;
+XP26:	PUSH	HL		; Yes, save 1st <EXPR3>
+	CALL	EXPR3		; Get 2nd <EXPR3>
+	CALL	CHGSGN		; Negate
+	JP	XP24		;  and add them
+; 
+EXPR3:	CALL	EXPR4		; Get 1st <EXPR4>
+XP31:	CALL	TSTC		; Multiply?
+	DB	"*"
+	DB	XP34-1-$	;
+	PUSH	HL		; Yes, save 1st
+	CALL	EXPR4		;  and get 2nd <expr4>
+	LD	B,0H		; Clear B for sign
+	CALL	CHKSGN		; Check sign
+	EX	DE,HL		; 2nd in DE now
+	EX	(SP),HL		; 1st in HL
+	CALL	CHKSGN		; Check sign of 1st
+	LD	A,H		; Is HL > 0FFH ?
+	OR	A
+	JP	Z,XP32		; No
+	LD	A,D		; Yes, how about DE
+	OR	D
+	EX	DE,HL		; Put smaller in HL
+	JP	NZ,AHOW		; Also >, will overflow
+XP32:	LD	A,L		; This is dumb
+	LD	HL,0H		; Clear result
+	OR	A		;  add and count
+	JP	Z,XP35
+XP33:	ADD	HL,DE
+	JP	C,AHOW		; Overflow
+	DEC	A
+	JP	NZ,XP33
+	JP	XP35		; Finished
+XP34:	CALL	TSTC		; Divide?
+	DB	"/"
+	DB	XP50-1-$	; Try logical operators
+	PUSH	HL		; Yes, save 1st <EXPR4>
+	CALL	EXPR4		;  and get 2nd one
+	LD	B,0H		; Clear B for sign
+	CALL	CHKSGN		; Check sign of 2nd
+	EX	DE,HL		; Put 2nd in DE
+	EX	(SP),HL		; Get 1st in HL
+	CALL	CHKSGN		; Check sign of 1st
+	LD	A,D		; Divide by 0?
+	OR	E
+	JP	Z,AHOW		; Say "OUT OF RANGE"
+	PUSH	BC		; Else save sign
+	CALL	DIVIDE		; Use subroutine
+	LD	H,B		; Result in HL now
+	LD	L,C
+	POP	BC		; Get sign back
+XP35:	POP	DE		;  and text pointer
+	LD	A,H		; HL must be +
+	OR	A
+	JP	M,QHOW		; Else it is overflow
+	LD	A,B
+	OR	A
+	CALL	M,CHGSGN	; Change sign if needed
+	JP	XP31		; Look or more terms
+;
+; Adapted from Z8TBASIC
+XP50:	CALL	TSTC		; Logical AND?
+	DB	'a'		;
+	DB	XP51-1-$	;
+	PUSH	HL		; Yes, save value
+	CALL	EXPR3		; Get 2nd<EXPR3>
+	EX	DE,HL		; 2nd in DE
+	EX	(SP),HL		; 1st in HL
+	LD	A,L		; Do 8 bit logical
+	AND	E		; 'AND'
+	JR	XP55		;
+;
+; Adapted from Z8TBASIC
+XP51:	CALL	TSTC		; Logical OR?
+	DB	'o'		;
+	DB	XP52-1-$	;
+	PUSH	HL		; Yes, save value
+	CALL	EXPR3		; Get 2nd<EXPR3>
+	EX	DE,HL		; 2nd in DE
+	EX	(SP),HL		; 1st in HL
+	LD	A,L		; Do 8 bit logical
+	OR	E		; 'OR'
+	JR	XP55		;
+;
+; Adapted from Z8TBASIC
+XP52:	CALL	TSTC		; Logical XOR?
+	DB	'x'		;
+	DB	XP53-1-$	;
+	PUSH	HL		; Yes, save value
+	CALL	EXPR3		; Get 2nd<EXPR3>
+	EX	DE,HL		; 2nd in DE
+	EX	(SP),HL		; 1st in HL
+	LD	A,L		; Do 8 bit logical
+	XOR	E		; 'XOR'
+	JR	XP55		;
+;
+; Adapted from Z8TBASIC
+XP53:	CALL	TSTC		; Logical SHIFT LEFT?
+	DB	'l'		;
+	DB	XP54-1-$	;
+	PUSH	HL		; Yes, save value
+	CALL	EXPR3		; Get 2nd<EXPR3>
+	EX	DE,HL		; 2nd in DE
+	EX	(SP),HL		; 1st in HL
+	LD	A,L		;  
+LLOOP:	RLCA			; Do 8 bit logical
+	DEC	E		; 'SHIFT LEFT' on A
+	JR	NZ,LLOOP	;   E times
+	JR	XP55		;
+;
+; Adapted from Z8TBASIC
+XP54:	CALL	TSTC		; Logical SHIFT RIGHT?
+	DB	'r'		;
+	DB	XP42-1-$	;
+	PUSH	HL		; Yes, save value
+	CALL	EXPR3		; Get 2nd<EXPR3>
+	EX	DE,HL		; 2nd in DE
+	EX	(SP),HL		; 1st in HL
+	LD	A,L		;
+RLOOP:	RRCA			; Do 8 bit logical
+	DEC	E		; 'SHIFT RIGHT' on A
+	JR	NZ,RLOOP	;   E times
+	JR	XP55		;
+; 
+EXPR4:	LD	HL,TAB4-1	; Find function in TAB4
+	JP	EXEC		; And go do it
+XP40:	CALL	TSTV		; No, not a function
+	JP	C,XP41		; Nor a variable
+	LD	A,(HL)		; Variable
+	INC	HL
+	LD	H,(HL)		; Value in HL
+	LD	L,A
+	RET
+XP41:	CALL	TSTNUM		; Or is it a number
+	LD	A,B		; # of digit
+	OR	A
+	RET	NZ		; OK
+PARN:	CALL	TSTC		; No digit, must be
+	DB	"("
+	DB	XP43-1-$	;
+	CALL	EXPR		; "(EXPR)"
+	CALL	TSTC
+	DB	")"
+	DB	XP43-1-$	;
+XP42:	RET
+XP43:	JP	QWHAT		; Else say: "SYNTAX ERROR"
+;
+; Adapted from Z8TBASIC
+XP55:	LD	L,A
+	POP	DE		; Restore text pointer
+	JP	XP23
+; 
+RND:	CALL	PARN		; *** RND(EXPR) ***
+	LD	A,H		; Expr must be +
+	OR	A
+	JP	M,QHOW
+	OR	L		; And non-zero
+	JP	Z,QHOW
+	PUSH	DE		; Save both
+	PUSH	HL
+	LD	HL,(RANPNT)	; Get memory as random
+	LD	DE,LSTROM	;  number
+	CALL	COMPAR
+	JP	C,RA1		; Wrap around if last
+	LD	HL,START
+RA1:	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	LD	(RANPNT),HL
+	POP	HL
+	EX	DE,HL
+	PUSH	BC
+	CALL	DIVIDE		; RND(N)=MOD(M,N)+1
+	POP	BC
+	POP	DE
+	INC	HL
+	RET
+; 
+ABS:	CALL	PARN		; *** ABS(EXPR) ***
+	CALL	CHKSGN		; Check sign
+	LD	A,H		; Note that -32768
+	OR	H		;  cannot change sign
+	JP	M,QHOW		; So say: "OUT OF RANGE"
+	RET
+SIZE:	LD	HL,(TXTUNF)	; *** SIZE ***
+	PUSH	DE		; Get the number of free
+	EX	DE,HL		;  bytes between 'TXTUNF'
+	LD	HL,VARBGN	;  and 'VARBGN'
+	CALL	SUBDE
+	POP	DE
+	RET
+;
+;==============================================================
+;
+;  *** OUT *** INP *** WAIT *** POKE *** PEEK *** & USR
+;
+; OUT I,J(,K,L)
+;
+; Outputs expression 'J' to port 'I', and may be repeated
+; as in data 'L' to port 'K' as many times as needed.
+;
+; INP (I)
+;
+; This function returns data read from input port 'I' as
+; it's value.
+;
+; WAIT I,J,K
+;
+; This command reads the status of port 'I', exclusive OR's
+; the result with 'K' if there is one, or if not with 0,
+; AND's with 'J' and returns when the result is nonzero.
+;
+; POKE I,J(,K,L)
+;
+; This command works like OUT except that it puts data 'J'
+; into memory location 'I'.
+;
+; PEEK (I)
+;
+; This function works like INP except it gets it's value
+; from memory location 'I'.
+;
+; USR (I(,J))
+;
+; USR calls a machine language subroutine at location 'I'.
+; If the optional parameter 'J' is used, its value is passed
+; in registers HL.  The value of the function should be
+; returned in registers HL.
+;
+;==============================================================
+;
+OUTCMD:	CALL	EXPR		; Get port # in L
+	PUSH	BC		; Save regs
+	PUSH	HL		; Save port #
+	CALL	TSTC		; After port #, a
+	DB	","		;  ',' must follow
+	DB	LQWHAT-1-$	; If not, then error
+	CALL	EXPR		; Get data in L
+	POP	BC		; Get port # in C
+	OUT	(C),L		; Output data to port
+	POP	BC		; Restore regs
+	CALL	TSTC		; End of command or
+	DB	","		;  another ','?
+	DB	OCMD1-1-$	; 
+	JP	OUTCMD		; Yes, get next parameter
+OCMD1:	CALL	FINISH		; Else finish command
+;
+WAITCM:	CALL	EXPR		; Get port # in L
+	PUSH	HL		; Put port # on stack
+	POP	IX		;  then save in X
+	CALL	TSTC		; Now a ',' must follow
+	DB	","		;
+	DB	LQWHAT-1-$	; If not, then error
+	CALL	EXPR		; Get param 'J' in L
+	PUSH	HL		; Save 'J' on stack
+	CALL	TSTC		; Is there a 2nd ','?
+	DB	","		;
+	DB	WCM1-1-$	; No, then param 'K'=0
+	CALL	EXPR		; Get 'K' in L
+	LD	A,L		; Move to A
+	POP	HL		; Recover 'J' in L
+	LD	H,A		; Move 'K' to H
+	JP	WCM2		;
+WCM1:	POP	HL		; HL unchanged, discard copy
+WCM2:	PUSH	BC		; Save regs
+	PUSH	IX		; Put port # on stack
+	POP	BC		;  then back in C
+WCM3:	IN	A,(C)		; Get port data in A
+	XOR	H		; 'XOR' data with 'K', result in A
+	AND	L		; 'AND' A with 'J', result in A
+	JP	Z,WCM3		; If result is zero, continue waiting
+	POP	BC		; Else restore regs and
+	CALL	FINISH		;   finish command
+;
+INP:	CALL	PARN		; Get port # in L
+	LD	H,0		; Clr high byte (8 bit input)
+	PUSH	BC		; Save regs
+	LD	C,L		; Get port # in C
+	IN	L,(C)		; Get port data in L
+	POP	BC		; Restore regs
+	RET
+;
+LQWHAT:	JP	QWHAT
+;
+POKE:	CALL	EXPR
+	PUSH	HL
+	CALL	TSTC
+	DB	","
+	DB	LQWHT2-1-$	;
+	CALL	EXPR
+	LD	A,L
+	POP	HL
+	LD	(HL),A
+	CALL	TSTC
+	DB	","
+	DB	POKE1-1-$	;
+	JP	POKE
+POKE1:	CALL	FINISH
+;
+PEEK:	CALL	PARN
+	LD	L,(HL)
+	LD	H,0
+	RET
+LQWHT2:	JP	QWHAT
+USR:	PUSH	BC
+	CALL	TSTC
+	DB	"("
+	DB	USRET1-1-$	;
+	CALL	EXPR	;
+	CALL	TSTC
+	DB	")"
+	DB	PASPRM-1-$	;
+	PUSH	DE
+	LD	DE,USRET
+	PUSH	DE
+;
+; Fix USR with offset (from Z8TBASIC)
+	LD	A,H		; Fix offset
+	OR	USROFF		;
+	LD	H,A		; 
+	PUSH	HL
+	RET			; Call USR routine
+PASPRM:	CALL	TSTC
+	DB	","
+	DB	USRET1-1-$	;
+	PUSH	HL
+	CALL	EXPR
+	CALL	TSTC
+	DB	")"
+	DB	USRET1-1-$	;
+	POP	BC
+	PUSH	DE
+	LD	DE,USRET
+	PUSH	DE
+;
+; Fix USR with offset (from Z8TBASIC)
+	LD	A,B		; Fix offset
+	OR	USROFF		;
+	LD	B,A		; 
+	PUSH	BC
+	RET			; Call USR routine
+USRET:	POP	DE
+USRET1:	POP	BC
+	RET
+;
+;==============================================================
+; 
+; *** DIVIDE *** SUBDE *** CHKSGN *** CHGSGN *** & CKHLDE *** 
+; 
+; 'DIVIDE' divides HL by DE, result in BC, remainder in HL
+;
+; 'SUBDE' subtracts DE from HL
+;
+; 'CHKSGN' checks sign of HL.  If +, no change;  if -, change
+; sign and flip sign of B.
+;
+; 'CHGSGN' changes sign of HL and B unconditionally.
+;
+; 'CKHLE' checks sign of HL and DE.  If different, HL and DE
+; are interchanged.  If same sign, not interchanged.  Either
+; case, HL and DE are then compared to set the flags.
+;
+DIVIDE:	PUSH	HL		; *** DIVIDE ***
+	LD	L,H		; Divide H by DE
+	LD	H,0
+	CALL	DV1
+	LD	B,C		; Save result in B
+	LD	A,L		; (Remainder+L)/DE
+	POP	HL
+	LD	H,A
+DV1:	LD	C,0FFH		; Result in C
+DV2:	INC	C		; Dumb routine
+	CALL	SUBDE		; Divide by subtract
+	JP	NC,DV2		;  and count
+	ADD	HL,DE
+	RET
+; 
+SUBDE:	LD	A,L		; *** SUBDE ***
+	SUB	E		; Subtract DE from
+	LD	L,A		;  HL
+	LD	A,H
+	SBC	A,D
+	LD	H,A
+	RET
+; 
+CHKSGN:	LD	A,H		; *** CHKSGN ***
+	OR	A		; Check sign of HL
+	RET	P		; If -, change sign
+; 
+CHGSGN:	LD	A,H		; *** chgsgn ***
+	CPL			; Change sign of HL
+	LD	H,A
+	LD	A,L
+	CPL
+	LD	L,A
+	INC	HL
+	LD	A,B		; And also flip B
+	XOR	80H
+	LD	B,A
+	RET
+; 
+CKHLDE:	LD	A,H
+	XOR	D		; Same sign?
+	JP	P,CK1		; Yes, compare
+	EX	DE,HL		; No, XCH and COMP
+CK1:	CALL	COMPAR
+	RET
+; 
+;==============================================================
+; 
+; *** SETVAL *** FIN *** ENDCHK *** & ERROR (& FRIENDS) *** 
+; 
+; "SETVAL" expects a variable, followed by an equal sign and
+; then an expr.  It evaluates the expr. and sets the variable
+; to that value.
+;
+; "FIN" checks the end of a command.  If it ends with ":",
+; execution continues.  If it ends with a CR, it finds the
+; next line and continues from there.
+;
+; "ENDCHK" checks if a command ends with a CR.  This is
+; required in certain commands. (GOTO, RETURN, and STOP etc.)
+;
+; "ERROR" prints the string pointed to by DE (and ends with
+; CR). It then prints the line pointed to by 'CURRNT' with a
+; "?" inserted where the old text pointer (should be on top
+; of the stack) points to.  Execution of TBI is stopped
+; and TBI is restarted.  However, if 'CURRNT' -> zero
+; (indicating a direct command), the direct command is not
+;  printed.  And if 'CURRNT' -> negative # (indicating 'INPUT'
+; command, the input line is not printed and execution is
+; not terminated but continued at 'INPERR'.
+;
+; Related to 'ERROR' are the following:
+; 'QWHAT' saves text pointer in stack and gets message "SYNTAX
+; ERROR". 'AWHAT' just gets message "SYNTAX ERROR" and jumps
+; to 'ERROR'. 'QSORRY' and 'ASORRY' do same kind of thing.
+; 'QHOW' and 'AHOW' in the zero page section also do this.
+;
+SETVAL:	CALL	TSTV		; *** SETVAL ***
+	JP	C,QWHAT		; No variable: "SYNTAX ERROR"
+	PUSH	HL		; Save address of var.
+	CALL	TSTC		; Pass "=" sign
+	DB	"="
+	DB	SV1-1-$		;
+	CALL	EXPR		; Evaluate expr.
+	LD	B,H		; Value in BC now
+	LD	C,L
+	POP	HL		; Get address
+	LD	(HL),C		; Save value
+	INC	HL
+	LD	(HL),B
+	RET
+SV1:	JP	QWHAT		; No "=" sign
+; 
+FIN:	CALL	TSTC		; *** FIN ***
+	DB	':'		; Multiple statements?
+	DB	FI1-1-$		;
+	POP	AF		; ":", purge ret addr.
+	JP	RUNSML		; Continue same line
+FI1:	CALL	TSTC		; Not ":", is it CR?
+	DB	CR		;
+	DB	FI2-1-$		;
+	POP	AF		; Yes, purge ret addr.
+	JP	RUNNXL		; Run next line
+FI2:	RET			; Else return to caller
+; 
+ENDCHK:	CALL	IGNBLK		; *** ENDCHK ***
+	CP	CR		; End with CR?
+	RET	Z		; OK, else say: "SYNTAX ERROR"
+; 
+FINISH:	POP	AF		; *** FINISH/RST 6 ***
+	CALL	FIN		; Check end of command
+QWHAT:	PUSH	DE		; *** QWHAT ***
+AWHAT:	LD	DE,WHAT		; *** AWHAT ***
+ERROR:	SUB	A		; *** ERROR ***
+	CALL	PRTSTG		; Print 'SYNTAX ERROR', 'OUT OF
+	POP	DE		; RANGE' or 'OUT OF MEMORY'
+	LD	A,(DE)		; Save the character
+	PUSH	AF		;  at where old DE ->
+	SUB	A		;  and put a 0 there
+	LD	(DE),A
+	LD	HL,(CURRNT)	; Get current line #
+	PUSH	HL
+	LD	A,(HL)		; Check the value
+	INC	HL
+	OR	(HL)
+	POP	DE
+	JP	Z,RSTART	; If zero, just restart
+	LD	A,(HL)		; If negative,
+	OR	A
+	JP	M,INPERR	;  redo input
+	CALL	PRTLN		; Else print the line
+	DEC	DE		;  up to where the 0 is
+	POP	AF		; Restore the character
+	LD	(DE),A
+	LD	A,3FH		; Print a "?"
+	CALL	OUTC
+	SUB	A		;  and the rest of the
+	CALL	PRTSTG		;  line
+	JP	RSTART
+QSORRY:	PUSH	DE		; *** QSORRY ***
+ASORRY:	LD	DE,SORRY	; *** ASORRY ***
+	JP	ERROR
+; 
+;==============================================================
+; 
+; *** GETLN *** FNDLN (& FRIENDS) *** 
+; 
+; 'GETLN' reads an input line into 'BUFFER'.  It first prompts
+; the character in A (given by the caller), then it fills the
+; the buffer and echoes.  It ignores LF's and NULLs, but still
+; echoes them back.  Rub-out is used to cause it to delete
+; the last character (if there is one), and ALT-MOD is used to
+; cause it to delete the whole line and start it all over.
+; CR signals the end of a line, and causes 'GETLN' to return.
+;
+; 'FNDLN' finds a line with a given line # (in HL) in the
+; text save area.  DE is used as the text pointer.  If the
+; line is found, DE will point to the beginning of that line
+; (i.e., the low byte of the line #), and flags are NC & Z.
+; If that line is not there and a line with a higher line #
+; is found, DE points to there and flags are NC & NZ.  If
+; we reached the end of text save area and cannot find the
+; line, flags are C & NZ.
+; 'FNDLN' will initialize DE to the beginning of the text save
+; area to start the search.  Some other entries of this
+; routine will not initialize DE and do the search.
+; 'FNDLNP' will start with DE and search for the line #.
+; 'FNDNXT' will bump DE by 2, find a CR and then start search.
+; 'FNDSKP' uses DE to find a CR, and then start search.
+;
+GETLN:	CALL	OUTC		; *** GETLN ***
+	LD	DE,BUFFER	; Prompt and init
+GL1:	CALL	CHKIO		; Check keyboard
+	JP	Z,GL1		; No input, wait
+	CP	8H		; Delete last character?
+	JP	Z,GL3		; Yes
+	CP	0AH		; Ignore LF
+	JP	Z,GL1
+	OR	A		; Ignore null
+	JP	Z,GL1
+	LD	(DE),A		; Else, save input
+	INC	DE		;  and bump pointer
+	CP	CR		; Was it CR?
+	JP	NZ,GL2		; No
+	LD	A,0AH		; Yes, get line feed
+	CALL	OUTC		; Call OUTC and line feed
+	RET			; We've got a line
+GL2:	LD	A,E		; More free room?
+	CP	BUFEND AND 0FFH
+	JP	NZ,GL1		; Yes, get next input
+GL3:	LD	A,E		; Delete last character
+	CP	BUFFER AND 0FFH	; But do we have any?
+	JP	Z,GL4		; No, redo whole line
+	DEC	DE		; Yes, backup pointer,
+	LD	A,' '		; Echo a space and
+	CALL	OUTC
+	LD	A,8H		;  then a back-space
+	CALL	OUTC
+	JP	GL1		; Go get next input
+GL4:	LD	A,'>'		; Output prompt at
+	JP	GETLN		;  start of line
+; 
+FNDLN:	LD	A,H		; *** FNDLN ***
+	OR	A		; Check sign of HL
+	JP	M,QHOW		; It can't be -
+	LD	DE,TXTBGN	; Init. text pointer
+; 
+FNDLNP	EQU	$		; *** FNDLNP ***
+FL1:	PUSH	HL		; Save line #
+	LD	HL,(TXTUNF)	; Check if we passed end
+	DEC	HL
+	CALL	COMPAR
+	POP	HL		; Get line # back
+	RET	C		; C,NZ passed end
+	LD	A,(DE)		; We did not, get byte 1
+	SUB	L		; Is this the line?
+	LD	B,A		; Compare low order
+	INC	DE
+	LD	A,(DE)		; Get byte 2
+	SBC	A,H		; Compare high order
+	JP	C,FL2		; No, not there yet
+	DEC	DE		; Else we either found
+	OR	B		;  it, or it is not there
+	RET			; NC,Z: Found; NC,NZ: No
+; 
+FNDNXT	EQU	$		; *** FNDNXT ***
+	INC	DE		; Find next line
+FL2:	INC	DE		; Just passed byte 1 & 2
+; 
+FNDSKP:	LD	A,(DE)		; *** FNDSKP ***
+	CP	CR		; Try to find CR
+	JP	NZ,FL2		; Keep looking
+	INC	DE		; Found CR, skip over
+	JP	FL1		; Check if end of text
+; 
+;==============================================================
+; 
+; *** PRTSTG *** QTSTG *** PRTNUM *** & PRTLN *** 
+; 
+; 'PRTSTG' prints a string pointed to by DE. It stops printing
+; and returns to caller when either an CR is printed or when
+; the next byte is the same as what was in A (given by the
+; caller).  Old A is stored in B, old B is lost.
+;
+; 'QTSTG' looks for a back-arrow, single quote, or double
+; quote.  If none of these, return to caller.  If back-arrow,
+; output an CR without a LF. If single or double quote, print
+; the string in the quote and demand a matching unquote.
+; After the printing, the next 3 bytes of the caller is skipped
+; over (usually a jump instruction).
+;
+; 'PRTNUM' prints the number in HL.  Leading blanks are added
+; if needed to pad the number of spaces to the number in C.
+; However, if the number of digits is larger than the # in
+; C, all digits are printed anyway.  A negative sign is also
+; printed and counted in, positive sign is not.
+;
+; 'PRTLN' prints a saved text line with line # and all.
+;
+PRTSTG:	LD	B,A		; *** PRTSTG ***
+PS1:	LD	A,(DE)		; Get a character
+	INC	DE		; Bump pointer
+	CP	B		; Same as old A?
+	RET	Z		; Yes, return
+	CALL	OUTC		; Else print it
+	CP	CR		; Was it a CR?
+	JP	NZ,PS1		; No, next
+	RET			; Yes, return
+; 
+QTSTG:	CALL	TSTC		; *** QTSTG ***
+	DB	'"'		;
+	DB	QT3-1-$		;
+	LD	A,22H		; It is a '"'
+QT1:	CALL	PRTSTG		; Print until another
+	CP	CR		; Was last one a CR?
+	POP	HL		; Return address
+	JP	Z,RUNNXL	; Was CR, run next line
+QT2:	INC	HL		; Skip 3 bytes on return
+	INC	HL
+	INC	HL
+	JP	(HL)		; Return
+QT3:	CALL	TSTC		; Is it an "'" ?
+	DB	27H		; "'"
+	DB	QT4-1-$		;
+	LD	A,27H		; Yes, do same
+	JP	QT1		;  as in '"'
+;
+; This doesn't work on a terminal - remove?
+QT4:	CALL	TSTC		; Is it back-arrow?
+	DB	5FH
+	DB	QT5-1-$		;
+	LD	A,8DH		; Yes, CR  without LF!!
+	CALL	OUTC		; Do it twice to give
+	CALL	OUTC		;  tty enough time
+	POP	HL		; Return address
+	JP	QT2
+QT5:	RET			; None of above
+; 
+PRTNUM:	PUSH	DE		; *** PRTNUM ***
+	LD	DE,0AH		; Decimal
+	PUSH	DE		; Save as a flag
+	LD	B,D		; B=Sign
+	DEC	C		; C=Spaces
+	CALL	CHKSGN		; Check sign
+	JP	P,PN1		; No sign
+	LD	B,2DH		; B=Sign
+	DEC	C		; '-' takes space
+PN1:	PUSH	BC		; Save sign & space
+PN2:	CALL	DIVIDE		; Divide HL by 10
+	LD	A,B		; Result 0?
+	OR	C
+	JP	Z,PN3		; Yes, we got all
+	EX	(SP),HL		; No, save remainder
+	DEC	L		;  and count space
+	PUSH	HL		; HL is old BC
+	LD	H,B		; Move result to BC
+	LD	L,C
+	JP	PN2		;  and divide by 10
+PN3:	POP	BC		; We got all digits in
+PN4:	DEC	C		;  the stack
+	LD	A,C		; Look at space count
+	OR	A
+	JP	M,PN5		; No leading blanks
+	LD	A,20H		; Leading blanks
+	CALL	OUTC
+	JP	PN4		; More?
+PN5:	LD	A,B		; Print sign
+	CALL	OUTC		; Maybe - or null
+	LD	E,L		; Last remainder in E
+PN6:	LD	A,E		; Check digit in E
+	CP	0AH		; 10 is flag for no more
+	POP	DE
+	RET	Z		; If so, return
+	ADD	A,30H		; Else convert to ASCII
+	CALL	OUTC		;  and print the digit
+	JP	PN6		; Go back for more
+; 
+PRTLN:	LD	A,(DE)		; *** PRTLN ***
+	LD	L,A		; Low order line #
+	INC	DE
+	LD	A,(DE)		; High order
+	LD	H,A
+	INC	DE
+	LD	C,4H		; Print 4 digit line #
+	CALL	PRTNUM
+	LD	A,20H		;  followed by a blank
+	CALL	OUTC
+	SUB	A		;  and then the text
+	CALL	PRTSTG
+	RET
+; 
+;==============================================================
+; 
+; *** MVUP *** MVDOWN *** POPA *** & PUSHA ***
+; 
+; 'MVUP' moves a block up from where DE-> to where BC-> until
+; DE = HL.
+;
+; 'MVDOWN' moves a block down from where DE-> to where HL->
+; until DE = BC.
+;
+; 'POPA' restores the 'FOR' loop variable save area from the
+; stack.
+;
+; 'PUSHA' stacks the 'FOR' loop variable save area into the
+; stack.
+;
+MVUP:	CALL	COMPAR		; *** MVUP ***
+	RET	Z		; DE = HL, return
+	LD	A,(DE)		; Get one byte
+	LD	(BC),A		; Move it
+	INC	DE		; Increase both pointers
+	INC	BC
+	JP	MVUP		;  until done
+; 
+MVDOWN:	LD	A,B		; *** MVDOWN ***
+	SUB	D		; Test if DE = BC
+	JP	NZ,MD1		; No, go move
+	LD	A,C		; Maybe, other byte?
+	SUB	E
+	RET	Z		; Yes, return
+MD1:	DEC	DE		; Else move a byte
+	DEC	HL		; But first decrease
+	LD	A,(DE)		;  both pointers and
+	LD	(HL),A		;  then do it
+	JP	MVDOWN		; Loop back
+; 
+POPA:	POP	BC		; BC = return addr.
+	POP	HL		; Restore lopvar, but
+	LD	(LOPVAR),HL	;  =0 means no more
+	LD	A,H
+	OR	L
+	JP	Z,PP1		; Yep, go return
+	POP	HL		; Nop, restore others
+	LD	(LOPINC),HL
+	POP	HL
+	LD	(LOPLMT),HL
+	POP	HL
+	LD	(LOPLN),HL
+	POP	HL
+	LD	(LOPPT),HL
+PP1:	PUSH	BC		; BC = return addr.
+	RET
+; 
+PUSHA:	LD	HL,STKLMT	; *** PUSHA ***
+	CALL	CHGSGN
+	POP	BC		; BC=Return address
+	ADD	HL,SP		; Is stack near the top?
+	JP	NC,QSORRY	; Yes, sorry for that.
+	LD	HL,(LOPVAR)	; Else save loop var.s
+	LD	A,H		; But if lopvar is 0
+	OR	L		;  that will be all
+	JP	Z,PU1
+	LD	HL,(LOPPT)	; Else, more to save
+	PUSH	HL
+	LD	HL,(LOPLN)
+	PUSH	HL
+	LD	HL,(LOPLMT)
+	PUSH	HL
+	LD	HL,(LOPINC)
+	PUSH	HL
+	LD	HL,(LOPVAR)
+PU1:	PUSH	HL
+	PUSH	BC		; BC = Return addr.
+	RET
+; 
+;==============================================================
+; 
+; *** OUTC *** & CHKIO ***
+;
+; These are the only I/O routines in TBI.
+; 'OUTC' is controlled by a software switch 'OCSW'.  If OCSW=0
+; 'OUTC' will just return to the caller.  If OCSW is not 0,
+; it will output the byte in A.  If that is a CR, a LF is also
+; send out.  Only the flags may be changed at return, all reg.
+; are restored.
+;
+; 'CHKIO' checks the input.  If no input, it will return to
+; the caller with the Z flag set.  If there is input, Z flag
+; is cleared and the input byte is in A.  However, if the
+; input is a CONTROL-O, the 'OCSW' switch is complimented, and
+; Z flag is returned.  If a CONTROL-C is read, 'CHKIO' will
+; restart TBI and not return to the caller.
+;
+CRLF:	LD	A,CR		; *** CRLF ***
+OUTC:	PUSH	AF		; *** OUTC OR RST 2 ***
+	LD	A,(OCSW)	; Print character only
+	OR	A		; If OCSW switch is on
+	JP	NZ,OC3		; It is on
+	POP	AF		; It is off
+	RET			; Restore AF and return
+OC3:	POP	AF		; Get old A back
+	PUSH	BC		; Save B on stack
+	PUSH	DE		;  and D
+	PUSH	HL		;  and H too
+	LD	(OUTCAR),A	; Save character
+	RST	18H		; Call P112 PUTCHR with char. in A
+	LD	A,(OUTCAR)	; Get char. back
+	CP	CR		; Was it a 'CR'?
+	JP	NZ,DONE		; No, done
+	LD	A,0AH		; Get linefeed
+	RST	18H		; Call P112 PUTCHR with LF in A
+DONE:	LD	A,(OUTCAR)	; Get character back
+IDONE:	POP	HL		; Get H back
+	POP	DE		;  and D
+	POP	BC		;  and B too
+	RET			; Done at last
+CHKIO:	PUSH	BC		; Save B on stack
+	PUSH	DE		;  and D
+	PUSH	HL		;  then H
+	RST	10H		; Call P112 GETCHR. Char. returned
+				;   in A, or Z set
+	JP	NZ,CI1		; If ready get character
+	JP	IDONE		; Restore and return
+CI1:	CP	CTRL_O		; Is it CONTROL-O?
+	JP	NZ,CI2		; No, more checking
+	LD	A,(OCSW)	; CONTROL-O; flip OCSW
+	CPL			; On to off, off to on
+	LD	(OCSW),A	;  and put it back
+	JP	IDONE		;  then return and restore
+CI2:	CP	CTRL_C		; Is it CONTROL-C?
+	JP	NZ,CI3		; No, then echo character
+	LD	A,0FFH		; Yes, make sure output is enabled
+	LD	(OCSW),A	;  by turning it on
+	JP	RSTART		;   and then restart TBI
+CI3:	RST	18H		; Echo to console
+	JP	IDONE		;  then return and restore
+; 
+;==============================================================
+; 
+; *** BUILT-IN P112 USR SUBROUTINES ***
+;
+; These are custom subroutines for use with the TBI USR(I,J)
+; function.
+;
+; 'GETIME' fetches 8 packed-BCD bytes from the P112 RTC by
+; pointing HL to the P112 timAry buffer space at 0FF2AH then
+; calling the P112 RdClk subroutine at 2245H.
+;
+; Use as X=USR(USR01_ADDRESS). X is a dummy: no return value.
+;
+; 'RDTIME' is used to pick out values from the timAry buffer.
+; The parameter J in USR(I,J) is used as an offset into the
+; buffer. The packed-BCD number in the buffer is converted to a
+; hexadecimal number then returned by TBI as a decimal integer.
+;
+; Use as X=USR(USR02_ADDRESS, OFFSET). The function returns a
+; decimal integer in X.
+;
+; OFFSET  RETURNS IN X
+; ------  ------------
+;  '0'    Seconds
+;  '1'    Minutes
+;  '2'    Hours (24-hour mode)
+;  '3'    Date
+;  '4'    Month
+;  '5'    Day-of-the-Week (1=Sunday)
+;  '6'    Year (last 2 digits)
+; 
+; Y2K Note: The year is accurate over the range 1978-2076. For
+; details, see Hal Bower's P112 ROMV4b source code.
+; 
+; 'PRTIME' prints a date/time string on screen using the P112
+; subroutine RTime.
+; 
+; Use as X=USR(USR03_ADDRESS). X is a dummy: no return value.
+; 
+; 'DELAY' is used to wait for a time determined by the integer
+; passed in L. L=1 gives approx. 1 sec delay (at 16MHz).
+; 
+; Use as X=USR(USR04_ADDRESS, DELAY). X is a dummy: no return
+; value.
+; 
+;==============================================================
+;
+; Fetch the current P112 Real Time Clock values
+; Enter: No input parameter
+; Exit : No return value
+; Uses : HL - All other registers are preserved
+;
+GETIME:	PUSH	AF		; Save
+	PUSH	BC		;  regs
+	PUSH	DE		;
+	LD	HL,TIMARY	; HL->Buffer
+	CALL	RDCLK		; Read RTC BCD bytes into buffer
+	POP	DE		; Restore
+	POP	BC		;  regs
+	POP	AF		;
+	RET			; Return to BASIC
+;.....
+; Get a decimal RTC value using offset
+; Enter: HL = Offset into timAry buffer
+; Exit : HL = Return value in decimal
+; Uses : HL - All other registers are preserved
+;
+RDTIME:	PUSH	AF		; Save
+	PUSH	BC		;  regs
+	LD	BC,TIMARY	; BC->Start of buffer
+	ADD	HL,BC		; Add offset into buffer
+	LD	A,(HL)		; Get packed-BCD in A
+	SRL	A		; Move high nibble
+	SRL	A		;  to
+	SRL	A		;   low
+	SRL	A		;    nibble
+	JR	Z,NOCNVT	; If nibble=0, don't convert
+	LD	B,A		; Use B as loop counter
+	XOR	A		; Clear A
+LOOP:	ADD	A,0AH		; Add 10 to partial result
+	DJNZ	LOOP		; Counter=0? Loop if not
+NOCNVT:	LD	C,A		; Save partial result
+	LD	A,(HL)		; Reload packed-BCD value,
+	AND	0FH		;  get low nibble then
+	ADD	A,C		;   add partial result
+	LD	H,0		; Clear H and
+	LD	L,A		;  return value in L
+	POP	BC		; Restore
+	POP	AF		;  regs
+	RET			; Return to BASIC
+;.....
+; Print date/time string on screen
+; Enter: No input parameter
+; Exit : No return value
+; Uses : HL - All other registers are preserved
+;
+PRTIME:	PUSH	AF		; Save
+	PUSH	BC		;  regs
+	PUSH	DE		;
+	CALL	RTIME		; Execute RTime subroutine
+	POP	DE		; Restore
+	POP	BC		;  regs
+	POP	AF		;
+	RET			; Return to BASIC
+;.....
+; Time delay
+; Enter: HL = L is approx. delay in seconds (at 16MHz)
+; Exit : No return value
+; Uses : HL - All other registers are preserved
+;
+DELAY:	PUSH	AF		; Save
+	PUSH	BC		;  regs
+TDEL:	LD	A,L		; Outer loop
+	AND	A		; If zero,
+	JR	Z,TDEL4		;  we are finished
+	XOR	A		; Clear A
+	LD	B,A		; Set up inner loop
+TDEL2:	CALL	TDEL3		; Inner loop
+	CALL	TDEL3		;
+	CALL	TDEL3		;
+	CALL	TDEL3		;
+	DJNZ	TDEL2		; Loop until B=0
+	DEC	L		;
+	JR	TDEL		; Loop until L=0
+;
+TDEL3:	DEC	A		; Inner-most loop
+	RET	Z		;
+	PUSH	AF		;
+	POP	AF		;
+	PUSH	IX		;
+	POP	IX		;
+	JR	TDEL3		; Loop until A=0
+;
+TDEL4:	POP	BC		; Restore
+	POP	AF		;  regs
+	RET			; Return to BASIC
+;
+;==============================================================
+; EXIT TINY BASIC
+;==============================================================
+SYSTEM:	RST	38H		; Exit to P112 debugger
+;
+;==============================================================
+; ERROR MESSAGES
+;==============================================================
+HOW:	DB	"OUT OF RANGE",CR
+OK:	DB	"OK",CR
+WHAT:	DB	"SYNTAX ERROR",CR
+SORRY:	DB	"OUT OF MEMORY",CR
+;
+;==============================================================
+; COLD START SIGN-ON MESSAGE
+;==============================================================
+MSG:	DB	"P112 TINY BASIC V1.0 (ROM), 18 FEB 1999",CR
+; 
+;==============================================================
+LSTROM	EQU	$		; All above can be in ROM
+;
+;==============================================================
+; INTERNAL VARIABLES
+;==============================================================
+;;	ASEG
+;;	ORG	INTVAR
+OUTCAR	EQU	INTVAR		; Output char. storage
+OCSW	EQU	OUTCAR+1	; Switch for output
+CURRNT	EQU	OCSW+1		; Points to current line
+STKGOS	EQU	CURRNT+2	; Saves sp in 'GOSUB'
+VARNXT	EQU	STKGOS+2	; Temporary storage
+STKINP	EQU	VARNXT+2	; Saves sp in 'INPUT'
+LOPVAR	EQU	STKINP+2	; 'FOR' loop save area
+LOPINC	EQU	LOPVAR+2	; Increment
+LOPLMT	EQU	LOPINC+2	; Limit
+LOPLN	EQU	LOPLMT+2	; Line number
+LOPPT	EQU	LOPLN+2		; Text pointer
+RANPNT	EQU	LOPPT+2		; Random number pointer
+TXTUNF	EQU	RANPNT+2	; ->Unfilled text area
+TXTBGN	EQU	TXTUNF+2	; Text save area begins
+TXTEND	EQU	TXTBGN+6BB0H	; Text save area ends
+VARBGN	EQU	TXTEND+0AFH	; Variable @(0)
+BUFFER	EQU	2*27+1+VARBGN	; Input buffer
+BUFEND	EQU	BUFFER+80	; Buffer ends
+STKLMT	EQU	BUFEND+2	; Top limit for stack
+STACK	EQU	STKLMT+0100H	; Stack starts here
+;
+;==============================================================
+	END
+

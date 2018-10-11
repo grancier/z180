@@ -1,0 +1,8 @@
+30c30
+< static int DAsm(char *S,byte *A);
+---
+> int DAsm(char *S,byte *A);    /* DMG -- 11Apr97 (removed 'static' storage class) */
+309a310
+> #ifndef DASMOBJONLY	/* DMG  11Apr97 */
+370a372
+> #endif 	/* (DASMOBJONLY) DMG  11Apr97 */

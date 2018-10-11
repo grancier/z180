@@ -1,0 +1,1365 @@
+	TITLE	D-X Designs P112 Boot ROM
+	SUBTTL	Cold-Start Functions
+;===============================================================;
+;	  C O L D  -  S T A R T   F U N C T I O N S		;
+;===============================================================;
+;=======================================================================;
+;   D-X Designs Pty. Ltd.   Perth, Western Australia			;
+;   Project: 112                       May, 1996			;
+;									;
+;  Copyright (C) 1996  David R. Brooks					;
+;									;
+;  This program is free software; you can redistribute it and/or	;
+;  modify it under the terms of the GNU General Public License		;
+;  as published by the Free Software Foundation; either version 2	;
+;  of the License, or (at your option) any later version.		;
+;									;
+;  This program is distributed in the hope that it will be useful,	;
+;  but WITHOUT ANY WARRANTY; without even the implied warranty of	;
+;  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the	;
+;  GNU General Public License for more details.				;
+;									;
+;  You should have received a copy of the GNU General Public License	;
+;  along with this program; if not, write to the Free Software		;
+;  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		;
+;									;
+; Revisions:								;
+;  04 Feb 2006	- Merged V5.0 changes (see below). New version V5.1	;
+;  03 Nov 2005	- Fix to add DTR enable to ESCC ports, and to add	;
+;		  code to enable RTS @ Parallel Port A, Bit 7 (PA7)	;
+;		  to correct lack of RTS signal assertion. Enables	;
+;		  Hardware Flow Control on the Terminal port.		;
+;		- Mod to NV-RAM table - Picked up byte 10 for system	;
+;		  mode flag bits.					;
+;		- Repaired bug in boot code that was flagging invalid	;
+;		  NvRam data to the BIOS as valid.			;
+;		- Changed DS-1202 code references to DS-1303 for new	;
+;		  system issue.						;
+;		- Added 'Load and Return' command to allow loading	;
+;		  the 'new' style disk OS and return to the debugger.	;
+;		- Upped ROM code base to Version 5.0.  Released TAG	;
+;  14 Dec 2004	- Z80182 register setup now done in the correct		;
+;		  order.					HP	;
+;  16 Jan 2004	- When booting from GIDE, check also for a standard	;
+;		  boot sector.					HP	;
+;		- Corrected a bug in RTime: mon12 was missing from	;
+;		  monTbl					HP	;
+;  25 Sep 1999	- RAM scan preserves original RAM contents	HP	;
+;  12 Jul 1997	- Cosmetic fixes per Paul De Bak.  Manually expand	;
+;		  CONFIG macro for ZMAC assembly.  Released	HFB	;
+;   4 Jul 1997	- Added defaults to Setup, added Date/Time set		;
+;		  for DS-1202, lengthened safety delay time.	HFB	;
+;   3 Jun 1997	- Added Dave Brooks' 06-02-97 and 08-03-97 updates,	;
+;		  Boot from GIDE, configuration of NVRam.	HFB	;
+;   4 Aug 96	- Add NV-RAM config for CPU Speed, Mem&IO Waits.	;
+;		  Check for DS-1202 presence.			HFB	;
+;  21 Jul 96	- Check DS-1202 RAM Checksum, if valid, Set SCCA	;
+;		  Data Rate from RAM0 Configuration byte.	HFB	;
+;   7 Jul 96	- Display Version Number, Correct RAM Scan.	DRB	;
+;=======================================================================;
+;  Basic hardware initialisations for the Z80182 CP/M board.
+; Determine hardware configuration, and make optimal hardware
+; setups. Link with the standard D-X Designs debugger.
+
+FALSE	EQU	0
+TRUE	EQU	NOT FALSE
+
+DATE	 MACRO
+	DEFB	'04 Feb 2006',0
+	 ENDM
+
+DBUG	EQU	FALSE
+
+Z80182	EQU	1
+	INCLUDE	Z180.INC
+
+	INCLUDE	  EQU.INC	; Get Defined Constant Values
+	INCLUDE	  MACROS.INC	; Macros needed in this code
+	INCLUDE	  DATA.INC	; DSEG Data locations as "Equates"
+;-----------------------------------------------------------------------
+;	H O O K S   F O R   B O O T - S E C T O R S ,   E T C .
+
+	  IF  NOT DBUG
+	ORG   0
+	  ENDIF
+
+	JP	Begin		; Cold-start entry
+
+	DB	06H, 02H, 04H	; Date code: YYMMDD
+
+	  IF  NOT DBUG
+	 ORG   08H
+DiskV:	JP	DiskOp		; Hook to disk routine for boot-loader
+	  ENDIF
+dpb3:	DW	DPB3i		; Pointers to standard DPB's
+dpb5:	DW	DPB5i
+
+	  IF  NOT DBUG
+	 ORG   10H
+	JP	GetChr		; Get keyboard to A (or Z)
+
+	 ORG   18H
+	JP	PutChr		; Send A to display
+
+	 ORG   20H
+	JP	PutMsg		; Display ASCIIZ string
+
+;------------------------------------------------------------------
+	 ORG   38H
+	JP	Rst38		; Trap for debugger
+	  ENDIF		;~Dbug
+;------------------------------------------------------------------
+				; Signature in the ROM code (see also "today")
+isdate:	DEFB	'ROM-code built: '
+	DATE
+	DEFB	'D-X Designs Pty Ltd, Perth Australia',0
+
+;==================================================================
+;	CTC INTERRUPT-SOURCE ROUTINES (for the Debugger)
+;
+;  The name is a misnomer. These routines are usually supported by
+; a Z80-CTC device, however the Z182 does not have one. They are
+; therefore supported by Channel-0 of the Programmable Reload Timer
+;==================================================================
+; Return Address of CTC Interrupt Vector
+ 
+GetVect: LD	A,I		; Read Interrupt Register
+	LD	H,A		; MSB - Interrupt page
+	IN0	A,(IL)
+	ADD	A,VPRT0		; Offset for timer
+	LD	L,A		; HL -> Vector locn.
+	LD	A,H
+	OR	L		; Z set if none. (May corrupt A)
+	RET			; Return CTC interrupt vector
+
+;.....
+; Trigger an Interrupt ASAP
+
+ArmCTC:	DI
+	LD	HL,1		; Get a very short time period
+	OUT0	(RLDR0H),H
+	OUT0	(RLDR0L),L	; Reload reg.
+	OUT0	(TMDR0H),H
+	OUT0	(TMDR0L),L	; Down counter
+	IN0	A,(TCR)
+	OR	11H		; Set timer & interrupt
+	OUT0	(TCR),A		;  Trigger the timer
+	RET			;   Return with ints. disabled
+
+;.....
+; Acknowledge & Cancel Interrupt
+;  To Stop the Timer safely, do these EXACTLY as given!!
+
+StopCTC: IN0	A,(TCR)		; Read status first
+	AND	0A2H		; Kill Ch-0, don't touch Ch-1
+	OUT0	(TCR),A		;  Stop it running
+	NOP
+	IN0	A,(TCR)		;   Acknowledge the interrupt
+	IN0	L,(TMDR0L)	; Must read these, to clear ints.
+	IN0	H,(TMDR0H)	;  (they are discarded)
+	EI
+	RET			; Don't use RETI for internals
+
+;.....
+; Basic CTC interrupt initialisation
+
+CTCSetup:
+	RET			; Nothing needed for timer
+
+;==================================================================
+;	    B A S I C    I N I T I A L I S A T I O N S
+;==================================================================
+
+hwMsg:	DB	'Special P112 Version: Interrupts Supported',CR,0
+
+Begin:	DI			; Disable interrupts in case we arrived here
+				;  by a software reset
+	LD	HL,inzTab	; Basic setups
+	XOR	A		; Get a Zero
+	LD	B,A		;  for Hi-Order Port #
+	CPL			;   Set A = FF
+Ini0:	LD	C,(HL)		; Fetch Port #
+	TST	C		; End?
+	JR	Z,Ini1		; ..jump if So
+	INC	HL		; Else pt to data
+	OUTI			;  send & Bump Ptr
+	INC	B		;   (correct Hi-Adr in B)
+	JR	Ini0		;  ..and keep going
+
+; This is the ESCC port used for Terminal I/O
+Ini1:	LD	HL,itab		; Set up the Z182 ESCC-A Serial port
+	LD	B,(HL)
+Iz1:	INC	HL		; Can't use OTIR: high addr. bits!
+	LD	A,(HL)
+	OUT0	(SCCACNT),A	; Send it
+	DJNZ	Iz1
+
+; Enable the RTS signal on PA7 for the ESCC Terminal Port.	TAG
+	IN0	A,(DRA)		; Read the PA data reg
+	RES	PaRTS,A		; Enable RTS bit
+	OUT0	(DRA),A		;  and set the port
+
+	LD	HL,itab		;- Set up the ESCC-B Serial port
+	LD	B,(HL)		;-
+Iz2:	INC	HL		;-
+	LD	A,(HL)		;-
+	OUT0	(SCCBCNT),A	;-  Send the byte
+	DJNZ	Iz2		;-
+
+	  IF  NOT DBUG
+	XCall	IY,memSetup	; Set up the RAM, define stack
+	LD	A,HIGH IVPage
+	LD	I,A		; Set interrupt page-base
+	IM	2		; Interrupt hardware operating mode
+
+	LD	HL,0FFFFH	; Clear out RAM first
+	XOR	A
+Clp:	LD	(HL),A
+	DEC	HL
+	BIT	7,H
+	JR	NZ,Clp		; Down to 8000H
+	  ENDIF		;~Dbug
+
+	LD	SP,0000H	; Put stack at the top
+	CALL	NVChk		;; Check DS-1202/1302 presence
+	JR	NZ,BadNV	;; ..jump if Not Present
+	CALL	NVChkS		;; Is Ram CheckSum Valid?
+	JR	NZ,BadNV	;; ..jump if Invalid
+	LD	HL,ramAry+10	;; Else Point into 24-byte Array
+	LD	A,(HL)
+	DEC	HL
+	LD	(nvRam10),A	;; Set HW Flow Control byte
+	LD	A,(HL)		;;
+	LD	(hdSPT),A	;;  Copy
+	DEC	HL		;;
+	LD	A,(HL)		;;
+	LD	(hdHds),A	;;   selected
+	DEC	HL		;;
+	LD	D,(HL)		;;
+	DEC	HL		;;
+	LD	E,(HL)		;;
+	LD	(hdTrks),DE	;;    values
+	DEC	HL		;;
+	LD	A,(HL)		;;
+	LD	(nvRam5),A	;; (HD Type)
+	DEC	HL		;;
+	DEC	HL		;;
+	DEC	HL		;;
+	LD	A,(HL)		;;
+	LD	(nvRam2),A	;; (Floppy0 timings)
+	DEC	HL		;;
+	LD	A,(HL)		;;
+	LD	(nvRam1),A	;; (Floppy0 Specs)
+	DEC	HL		;;
+	LD	A,(HL)		;;
+	LD	(nvRam0),A	;; (Speeds)
+	AND	00000111B	;; Strip off all but Rate
+	JR	OkNV		;; ..continue to save results
+	
+BadNV:	OR	0FFH		;; Set "Bad Checksum" Flag
+OkNV:	LD	(NVRate),A	;;  save 0FFH if Bad, 00..07H if Good (Rate)
+	BIT	7,A		;; Valid?
+	JR	NZ,UsDflt	;; ..jump if Not
+
+;; Clock RAM is Valid.  Use stored values to set system
+
+	LD	A,(nvRam0)	;; Get RAM0
+	AND	10000000B	;; Get CPU Clock Divisor Bit
+	OUT0	(CCR),A		;;  set Hi/Lo
+	JR	UsDfl0		;; ..rejoin main flow
+
+UsDflt:	LD	BC,(inzTb1)	; Set Proc Speed fm 1 Entry Table
+	LD	A,B
+	LD	B,0
+	OUT	(C),A
+	
+UsDfl0:	CALL	ClockSpd
+	DB	0		; Setup clock, no output yet
+
+	CALL	CTCSetup	; Setup interrupt for debugger
+
+	LD	HL,nLine
+	CALL	PutMsg		; Blank line at the start
+
+	CALL	SMCSetup	; Initialise the SMC chip
+
+	XOR	A		; Be sure timer is stopped
+	OUT0	(TCR),A
+
+	LD	HL,isdate
+	CALL	PutMsg		; ROM Date Code
+	LD	HL,sepr
+	CALL	PutMsg
+
+	CALL	ClockSpd	; Report system-clock speed
+	DB	1
+	CALL	TellMem		; Report available RAM
+
+	LD	A,(NVRate)	;-
+	RLA			;- Is NV-Ram Valid?
+	JR	C,BootAll	;-   Bypass next if Not, all is Set
+	LD	HL,wtSetM	;-
+	CALL	PutMsg		;- Else Give chance to Setup
+	LD	B,20		;-  Set Outer Loop for ~6 Sec
+Wt000:	IN0	E,(RLDR1L)	;-
+	IN0	D,(RLDR1H)	;- Get Timer Count for Inner Loop
+Wt001:	CALL	GetChr		;- Any Key Pressed?
+	JR	Z,Wt002		;- ..jump if Not
+	CP	ESC		;- ESCape Key?
+	JR	Z,Wt003		;- ..jump if Yes to (possibly) Set Up Ram
+	CP	CR		;- RETurn Key?
+	JP	Z,Debug		;- ..Break out to Debug if Yes
+Wt002:	DEC	DE		;- Count down
+	LD	A,D		;-
+	OR	E		;-  Done?
+	JR	NZ,Wt001	;- ..continue sampling if Not (inner)
+	DJNZ	Wt000		;-  ..loop Outer if Not done
+	JR	Wt004		;-   ..else jump to boot on timeout
+
+Wt003:	LD	A,CR		;-
+	CALL	PutChri		;- Else go to new line
+	CALL	TCfg		;-   Enter Setup (only returns if CR entered)
+Wt004:	LD	A,CR		;- Back up to beginning of line
+	CALL	PutChr		;-
+	LD	HL,wtSetC	;-  Clear the Prompt
+	CALL	PutMsg		;-
+	LD	A,(nvRam0)	;- Get RAM0 values
+	RLA			;-  Move Extra Mem & IO Wait bits
+	AND	11110000B	;-   mask
+	OUT0	(DCNTL),A	;-    (set)
+
+; Boot All devices after validating which are available
+
+;--------------------------------------------------------------------
+; ROMv5.0 Mod                                                    TAG
+; Allow OS 'Load and Return' modification to load the OS and
+; return to Debugger.
+BootAll:
+	xor	a
+	ld	(OsEx),a
+; End of mods
+BAM:	LD	A,10		;; Ten tries to boot before going to Debug
+BtLoop:	LD	(AF_),A		;;  (store in unused area)
+	LD	BC,0		;;
+BtDly:	DJNZ	BtDly		;; Delay
+	DEC	C		;;  a
+	JR	NZ,BtDly	;;   Little
+
+	CALL	InGIDE		;- Init GIDE Geometry if Drive present
+	CALL	CkSCSI		;; Reset SCSI Controller, check if Present
+
+	CALL	ChkBrk		;- Sample Keyboard, break to Debug if KeyPress
+	CALL	FDBoot		;; Attempt a Floppy Boot
+
+	CALL	ChkBrk		;- Sample Keyboard, break to Debug if KeyPress
+	LD	A,(SCSIOk)	;;
+	OR	A		;; Do we have a SCSI Controller?
+	CALL	Z,BtSCSI	;;   Try Boot if Yes
+
+	CALL	ChkBrk		;- Sample Keyboard, break to Debug if KeyPress
+	LD	A,(GIDEOk)	;-
+	OR	A		;- Do we have a GIDE?
+	CALL	Z,BtGIDE	;-   Try Boot if Yes
+
+	LD	A,(AF_)		;;
+	DEC	A		;; More tries remaining?
+	JR	NZ,BtLoop	;; ..loop if So
+			;;..else fall thru..
+	JP	Debug		; To the internal debugger
+
+nLine:	DB	CR,0
+sepr:	DB	'  ',0
+wtSetM:	DB	CR,'    (ESCape to enter Setup, RETurn for Debug)',0
+wtSetC:	DB	'                                               ',CR,0
+
+;.....
+; Break to Debugger if any Key Pressed
+
+ChkBrk:	CALL	GetChr		;- Sample Keyboard
+	JP	NZ,Debug	;- .Break to Debug if Key Pressed
+	RET			;-   Else back to Caller
+
+;========================================================================
+; Routine to output a block of initialisation data. Table is Port, then
+; Data.  A port-value of 0 terminates.
+; Enter: HL -> [Port, Data] entries
+; Exit : HL -> End-of-Table
+ 
+IoInz:	PUSH	AF		; Save regs.
+	PUSH	BC
+	XOR	A		; Get a Zero
+	LD	B,A		;  to Hi-order Address
+	CPL			; 0 -> FF
+IIz1:	LD	C,(HL)		; Get Port #
+	TST	C		; End?
+	JR	Z,IIz2		; ..exit if So
+	INC	HL		; Else advance to data byte
+	OUTI			;  send it
+	INC	B		;   (correct B for above)
+	JR	IIz1		;  ..keep going
+
+IIz2:	POP	BC		; Get them back
+	POP	AF
+	RET
+
+;====================================================================
+;	P R I M A R Y    I / O    P O R T    R O U T I N E S
+;====================================================================
+; Output A on ESCC port
+
+PutChr:	PUSH	AF		; Save the character
+OutAx:	IN0	A,(SCCACNT)
+	BIT	2,A		; Port ready? Test THRE bit
+	JR	Z,OutAx		; .Loop till it is
+
+; See if hardware flow control enabled in NvRam
+	LD	A,(nvRam10)	; Get Hardware Flow Control bit
+	BIT	0,A
+	JR	Z,NoHFC		; Go if HFC disabled
+
+; For hardware handshaking, ensure CTS (bit) is set.		TAG
+	IN0	A,(SCCACNT)
+	BIT	5,A		; CTS set?
+	JR	Z,OutAx
+; and ensure DSR input is asserted
+	IN	A,(DRA)		; Read Parallel Port A data reg
+	BIT	PaDSR,A
+	JR	NZ,OutAx	; Go if DSR input not asserted
+NoHFC:
+	POP	AF
+	OUT0	(SCCAD),A	; Send char.
+	RET
+
+;.....
+; Get char. from ESCC to A (Z if none)
+
+GetChr:	IN0	A,(SCCACNT)
+	AND	01H		; Take only RX-ready
+	RET	Z		; .If none, exit with Z (& A=0)
+	IN0	A,(SCCAD)	; Else, pull the char.
+	RET
+
+;====================================================================
+;	  S M C    C H I P    S E T U P    R O U T I N E
+;====================================================================
+; NB This code is written for the FDC37C665 series parts.
+; Although the hardware can run other parts, this code will
+;  need altering.
+
+; Enter Configuration Mode Command Sequence
+ 
+EnterCfg:
+	DB	CFCNTL, 55H	; Special sequence to enter mode
+	DB	CFCNTL, 55H	;NB different for the '666 series
+	DB	0
+
+; Exit Configuration Mode Command Sequence
+
+ExitCfg:
+	DB	CFCNTL, 0AAH
+	DB	0
+
+;4b Macros manually expanded for correct assembly by Al Hawley's ZMAC.
+
+cfg665:			; Config. for FDC37C665GT, -IR, and FDC37C666xx
+cfg666:
+;4b	Config	CR0, 38H	; IDE disabled, FDC enabled
+	DEFB	CFCNTL, CR0	;4b IDE disabled, FDC enabled
+	DEFB	CFDATA, 38H	;4b
+;4b	Config	CR1, 85H	; Basic bi-di printer port
+	DEFB	CFCNTL, CR1	;4b Basic bi-di printer port
+	DEFB	CFDATA, 85H	;4b
+;4b	Config	CR2, 1CH	; UART 1 at primary addr., UART 2 off
+	DEFB	CFCNTL, CR2	;4b UART 1 at primary addr., UART 2 off
+	DEFB	CFDATA, 1CH	;4b
+;4b	Config	CR3, 78H	; Diskette: normal XT mode
+	DEFB	CFCNTL, CR3	;4b Diskette: normal XT mode
+	DEFB	CFDATA, 78H	;4b
+;4b	Config	CR4, 00H	; No ECP/EPP parallel port modes
+	DEFB	CFCNTL, CR4	;4b No ECP/EPP parallel port modes
+	DEFB	CFDATA, 00H	;4b
+;4b	Config	CR5, 24H	; Swap drive 0,1 lines
+	DEFB	CFCNTL, CR5	;4b Swap drive 0,1 lines
+	DEFB	CFDATA, 24H	;4b
+	DB	0
+
+;.....
+; Configure the SMC Multi-IO Chip
+
+SmcSetup:
+	LD	HL,EnterCfg
+	CALL	IoInz		; Put it into Config. mode
+	LD	A,CRF
+	CALL	GetOne		; CRF must = 0
+	AND	A
+	JR	NZ,BadChip
+	LD	A,CRD
+	CALL	GetOne
+	LD	IX,cfg665
+	CP	65H		; Must be '665 or '666
+	JR	Z,Check1
+	LD	IX,cfg666
+	CP	66H
+	JR	NZ,BadChip
+Check1:	LD	B,A		; Saved chip ID
+	LD	A,CRE
+	CALL	GetOne
+	LD	C,A		; Save subtype
+	RES	7,A
+	CP	2		; Must be correct
+	JR	NZ,BadChip
+			; Found a good chip: say so
+	PUSH	BC
+	LD	HL,chipM1
+	CALL	PutMsg
+	POP	BC
+	LD	HL,chipM5
+	LD	A,B
+	CP	66H
+	JR	NZ,Cf2
+	LD	HL,chipM6
+Cf2:	PUSH	BC
+	CALL	PutMsg
+	POP	BC
+	LD	HL,chipM2
+	BIT	7,C
+	JR	Z,Cf3
+	LD	HL,chipM3
+Cf3:	CALL	PutMsg
+	LD	HL,chipM4
+	CALL	PutMsg
+	PUSH	IX
+ 	POP	HL
+	CALL	IoInz		; Do the configuration
+	JR	CfDone
+
+BadChip: LD	HL,chipM9
+	CALL	PutMsg		; Unrecognised chip
+
+CfDone:	LD	HL,exitCfg	; Exit config. mode
+	CALL	IoInz
+	RET			; Done
+
+chipM1:	DB	CR,'SMC IO chip identified (FDC37C66',0
+chipM2:	DB	'GT)',0
+chipM3:	DB	'IR)',0
+chipM4:	DB	': configuring',CR,0
+chipM5:	DB	'5',0
+chipM6:	DB	'6',0
+chipM9:	DB	CR,'Unrecognised IO chip: not configured',CR,0
+
+; Read Configuration Register given in A
+
+GetOne:	OUT0	(CFCNTL),A	; Point to the reg.
+	IN0	A,(CFDATA)	; Get value
+	RET
+
+;==================================================================
+; Output A in hexadecimal
+
+HexA:	PUSH	DE
+	PUSH	HL		; Save regs.
+	LD	HL,0
+	PUSH	HL
+	PUSH	HL		; Local space: 4 bytes
+	ADD	HL,SP		; SP -> HL
+	LD	E,L
+	LD	D,H		; Copy in DE
+	CALL	PutA		; A-> hex. on stack
+	DEC	DE
+	XOR	A
+	LD	(DE),A		; Terminator
+	CALL	PutMsg		; Display it (from HL)
+	POP	HL
+	POP	HL		; Discard temp. space
+	POP	HL		; Restore saved regs.
+	POP	DE
+	RET
+
+;======================================================================
+; Measure the system-clock speed.
+; Measurement is done by setting the 2ary serial port to 1200bps, and
+; outputting a 10-bit character (actually NUL).  This interval equates
+; to a frequency of 1200/10 = 120Hz.  This period is measured using the
+; Z180 system timer, which counts CLK/20. The final value will then be
+; SYSCLK / (20 * 120). This will be a 65k complement, as the timer
+; counts down. The measurement will be subject to some error, but near
+; enough to identify the standard crystals:
+;	12.288MHz, 16.0MHz, 18.432MHz, and 24.576MHz.
+;
+; The estimated speed is reported on the monitor, and the Timer-1 reload
+; register is set up to yield a "tick" rate of 25Hz.  The "tick" is NOT
+; actually initiated.
+
+ClockSpd:
+	IN0	A,(_LSR)	; First, be sure it's empty
+	BIT	6,A
+	JR	Z,ClockSpd
+	LD	HL,tmInz	; Ready to run it
+	CALL	IoInz		; Kick off SIO & timer
+
+ClkW:	IN0	A,(_LSR)	; Now wait till it's gone
+	BIT	6,A
+	JR	Z,Clkw
+
+	IN0	L,(TMDR1L)	; Get residual timer into HL
+	IN0	H,(TMDR1H)
+
+	XOR	A		; Then kill the timer (at startup,
+	OUT0	(TCR),A		;  we know it's not shared)
+	IN0	A,(_RBR)	; Clear the looped char.
+
+	INC	H		; Round HL in top 7 bits
+	RES	0,H		; Further rounding
+	LD	B,tCnt		; No. of table items
+	LD	A,H
+	LD	HL,trTab
+	LD	DE,lTab
+Tr1:	CP	(HL)		; Matched?
+	JR	Z,Tr2
+	ADD	HL,DE		; No: next
+	DJNZ	Tr1
+	LD	HL,oddOne-1	; Offset for INC below
+Tr2:	INC	HL		; Point at the timer value
+	LD	A,(HL)
+	OUT0	(RLDR1L),A
+	INC	HL
+	LD	A,(HL)
+	OUT0	(RLDR1H),A	; Set-up the timer
+
+	INC	HL
+	LD	A,(NVRate)	;; Get Rate/Valid Flag
+	BIT	7,A		;; Valid?
+	JR	Z,RateOk	;; ..jump if So
+	LD	A,5		;; Else default to 9600 bps
+RateOk:	PUSH	DE		;; Save regs
+	PUSH	HL		;;
+	ADD	A,A		;; Double index value
+	LD	E,A		;;
+	LD	D,0		;;
+	ADD	HL,DE		;;  Pt to Divisor Word
+	LD	E,(HL)		;;   fetch
+	INC	HL		;;
+	LD	D,(HL)		;;
+	LD	A,WR12
+	OUT0	(SCCACNT),A
+	OUT0	(SCCACNT),E
+	LD	A,WR13
+	OUT0	(SCCACNT),A
+	OUT0	(SCCACNT),D	; Set a correct baud-rate
+ 
+	POP	HL		;; Restore Ptr to Divisor Table Start
+	LD	DE,16		;;
+	ADD	HL,DE		;;  Advance past table to String Addrs
+	POP	DE		;;
+	IN0	A,(SCR)		; Is the ROM Phantomed?
+	BIT	3,A
+	LD	A,(HL)		; Value for Phantom
+	INC	HL
+	JR	NZ,Nph
+	LD	A,(HL)		; Value if Not Phantomed
+Nph:	OUT0	(DCNTL),A	; Define Memory & IO Wait States
+	INC	HL		;
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A		; Msg. pointer in hl
+	OR	H		; Zero if none
+	RET	Z
+	POP	DE
+	LD	A,(DE)		; In-line flag
+	INC	DE
+	PUSH	DE		; Replace link
+	AND	A		; If zero, no messages
+	RET	Z
+	PUSH	HL		; Else, output reports
+	LD	HL,xtMs1
+	CALL	PutMsg
+	POP	HL
+	CALL	PutMsg		; The observed frequency
+	LD	HL,xtMs2
+	CALL	PutMsg
+	RET			; Then done
+
+xtMs1:	DB	'CPU clock: ',0
+xtMs2:	DB	'MHz',CR,0
+
+trTab:	DB	0F6H		; Translation table for results		(-0AH)
+	DW	12288		; Timer value (6.144 MHz)
+	DW	638, 318, 158, 78	; Divisors for 300,600,1200,2400 bps
+	DW	 38,  18,   8,  3	;	4800,9600,19200,38400 bps
+	DB	10H		; Wait States: ROM Phantomed
+	DB	10H		;   Ditto: Physical ROM
+	DW	ms12_2		; Ptr. to message
+lTab	 EQU  $-trTab
+
+	DB	0F4H		;					(-0CH)
+	DW	16000		; (8.000 MHz)
+	DW	831, 415, 206, 102
+	DW	 50,  24,  11,   4	; NOTE: Inaccurate @ 38.4 kbps
+	DB	10H
+	DB	10H
+	DW	ms16_2
+
+	DB	0F2H		;					(-0EH)
+	DW	18432		; (9.216 MHz)
+	DW	958, 478, 238, 118
+	DW	 58,  28,  13,   5	; NOTE Inaccurate @ 38.4 kbps
+	DB	20H
+	DB	20H
+	DW	ms18_2
+
+	DB	0ECH		;					(-14H)
+	DW	24576		; (12.288 MHz)
+	DW	1278, 638, 318, 158
+	DW	  78,  38,  18,   8
+	DB	20H
+	DB	20H
+	DW	ms12		;
+
+	DB	0E6H		;					(-1AH)
+	DW	32000		; (16.000 MHz)
+	DW	1665, 831, 415, 206
+	DW	 102,  50,  24,  11
+	DB	20H
+	DB	20H
+	DW	ms16
+
+	DB	0E2H		;					(-1EH)
+	DW	36864		; (18.432 MHz)
+	DW	1918, 958, 478, 238
+	DW	 118,  58,  28,  13
+	DB	60H
+	DB	0A0H
+	DW	ms18
+
+	DB	0D8H		;					(-28H)
+	DW	49152		; (24.576 MHz)
+	DW	2558,1278, 638, 318
+	DW	 158,  78,  38,  18
+	DB	70H
+	DB	0F0H
+	DW	ms24
+tCnt	 EQU  ($-trTab)/lTab	; No. of entries
+
+oddOne:	DW	34000		; Default timer for odd crystals
+	DW	1665, 831, 415, 206
+	DW	 102,  50,  24,  11
+	DB	70H		; Assume worst-case
+	DB	0F0H		;   Max Wait States
+	DW	unkmsg		; Unknown Rate Message
+	
+ms12_2:	DB	'6.144',0
+ms16_2:	DB	'8.000',0
+ms18_2:	DB	'9.216',0
+ms12:	DB	'12.288',0
+ms16:	DB	'16.000',0
+ms18:	DB	'18.432',0
+ms24:	DB	'24.576',0
+
+unkmsg:	DB	'??-Unknown-??',0	;; Use for Non-Standard/Un-determined
+
+tmInz:	DB	_LCR, 80H	; DLAB=1
+	DB	_DDL, 60H	; 96D, divisor for 1200bps
+	DB	_DLM,  0H
+	DB	_LCR, 03H	; DLAB=0, 8 bits, no parity
+	DB	_MCR, 10H	; Loopback, so nothing is output
+	DB	TMDR1L, 0
+	DB	TMDR1H, 0	; Timer-1: preset to zero
+	DB	RLDR1L, 0
+	DB	RLDR1H, 0
+	DB	TCR,	02H	; Kick off the timer
+	DB	_THR,   0	; Send the byte
+	DB	0		; Stop flag
+
+;==================================================================
+; Report amount of RAM available
+ 
+TellMem: IN0	A,(RAMUBR)	; Upper bound
+	ADD	A,1		; To 1st Invalid Page (Set CY)
+	RRA			;  Scale & Keep CY
+	IN0	L,(RAMLBR)	; Lower Bound
+	SRL	L		;  Scale Similarly
+	SUB	L		;   Available RAM / 8kB
+	LD	L,A
+	LD	H,8
+	MLT	HL		; HL = size * 1kB
+ 
+	PUSH	HL
+	LD	HL,rams1	; Now output report
+	CALL	PutMsg
+	POP	HL
+	CALL	DecOut
+	LD	HL,rams2
+	CALL	PutMsg
+	IN0	A,(RAMLBR)
+	CALL	HexA		; Lower bound
+	LD	HL,rams3
+	CALL	PutMsg
+	IN0	A,(RAMUBR)
+	CALL	HexA
+	LD	HL,rams4
+	CALL	PutMsg
+
+	IN0	A,(SCR)
+	BIT	3,A		; ROM shadowed?
+	LD	HL,rams5
+	CALL	NZ,PutMsg	; Say so
+	LD	HL,nLine
+	CALL	PutMsg
+	RET
+
+rams1:	DB	'RAM available: ',0
+rams2:	DB	'kB. From ',0
+rams3:	DB	'000 to ',0
+rams4:	DB	'FFF',0
+rams5:	DB	CR,'        ROM shadowed into 1st 32kB',0
+
+;==================================================================
+; Initialisation tables
+
+inzTab:	DB	RCR,	 00	; No refresh (all static)
+	DB	OMCR,	 00	; Timings as Z80
+	DB	IL,	 00	; Local interrupts vector base
+;	DB	WSGCS,   9BH	;  CS waits don't work??
+	DB	DCNTL,   70H	; Wait states:	mem 1 (for ROM), IO 4 (for SMC)
+				;  (This is Re-Set later or if NVRAM Valid!)
+	  IF  NOT DBUG
+	DB	ROMBR,   07H	; ROM in 1st 32kB
+	  ENDIF
+
+	 IFDEF  lanalyse
+	DB	SCR,	 70H	; Logic analyser support, ROM mapped
+	 ELSE
+	DB	SCR,	 60H	; No unnecessary outputs, ROM mapped
+	 ENDIF
+
+	  IF  NOT DBUG
+	DB	RAMLBR,  08H	; RAM starts above ROM
+	DB	RAMUBR, 0FFH	; RAM to the top, for now
+	DB	CBAR,   0C8H	; Memory mapping:
+				; Common 0: 0000-7FFF: 00000-07FFF
+				; Bank:	8000-BFFF: 08000-0BFFF
+				; Common 1: C000-FFFF: 08000-0BFFF
+	DB	BBR,	 00 
+	DB	CBR,    0FCH	; Wrap CA1 over BA, at 08000
+	  ENDIF
+	DB	INTYPE,  5CH	; INT1,2 level: MRD/WR, IOCS
+;-	DB	CCR,	 80H	; Full clock speed (16MHz)
+
+	DB	ITC,	 39H	; Block SMC interrupts, yet
+	DB	TCR,	 00	; Make sure the timer is stopped
+	DB	DRA,	0A0H	; Initial values: Vpp off
+	DB	DDRA,	 41H	; PA6 & 0 are in, others out
+	DB	0	;End mark
+
+inzTb1:	DB	CCR,	 80H	;- Full Clock Speed (If NVRam invalid/absent)
+
+			; ESCC Serial Channel
+iTab:	DB	itAbend-$-1	; Length of table
+	DB	WR4,  01000100B ; x16, 1 stop bit, no parity
+	DB	WR1,  00000100B ; Parity is special RX condition
+	DB	WR3,  11000000B ; RX 8 bits/char
+	DB	WR5,  01100000B ; TX 8 bits/char
+	DB	WR9,  00000001B ; Status affects int. vector
+	DB	WR11, 01010110B ; RX & TX <- BRG, RTxC <- BRG
+	DB	WR12, 50	; Baud rate divisor LSB: 9600bps
+	DB	WR13, 0		;  Ditto,  MSB
+	DB	WR14, 01100010B ; BRG source (internal) DPLL off
+	DB	WR14, 00000011B ; BRG enabled
+	DB	WR1,  00000100B ; Enable ints. here, if reqd.
+	DB	WR15, 00000000B ; No "advanced" features
+	DB	WR0,  00010000B ; Reset pending external ints.
+	DB	WR0,  00010000B ; Repeat, to be sure of it
+	DB	WR3,  11000001B ; RX enabled
+; Next two lines is a change for ROMv5.0 to enable DTR signal
+;	DB	WR5,  01101010B ; TX enabled, RTS active
+	DB	WR5,  11101010B	; DTR enabled, 8 bits, TX enabled, RTS active
+itAbend	 EQU  $
+
+	SUBTTL	Memory Chip Location
+	PAGE
+;===============================================================;
+;   M E M O R Y - C H I P   L O C A T I O N   F U N C T I O N   ;
+;===============================================================;
+; Determine memory Size, & make setups
+
+; Memory chips may be fitted in several combinations. The only rule is that
+; if 2 RAMs are used, both must be of the same size.  The code will attempt
+; to "phantom" the ROM into low RAM. This requires:
+;	1. RAM is available at physical address 00000
+;	2. Not less than 256kB of RAM are fitted
+
+; The setup follows this decision table:
+
+;Chips fitted    Address responses       RAM valid at    RAM Bounds
+;U2      U3      A19 A18 A17 A16 A15     F0000   08000   Low     High
+;--------------------------------------------------------------------
+;--      --       x   x   x   x   x        N       N     No RAM: Halt
+;32kB    --       x   x   x   x   0        Y       N     00      07
+;--      32kB     x   x   x   x   1        N       Y     08      0F
+;32kB    32kB     x   x   x   x   -        Y       Y     00      0F
+;128kB   --       x   x   0   -   -        N       Y     00      1F
+;--      128kB    x   x   1   -   -        Y       N     20      3F
+;128kB   128kB    x   x   -   -   -        Y       Y     00      3F
+;512kB   --       0   -   -   -   -        N       Y     00      7F
+;--      512kB    1   -   -   -   -        Y       N     80      FF
+;512kB   512kB    -   -   -   -   -        Y       Y     00      FF
+
+;ROM (32kB)       0   0   0   0   0 (selected by ROMBR decoder)
+
+; where "x" = address-bit not decoded (addresses will wrap)
+;   and "-" = a fully decoded address bit.
+
+;  The test starts by marking all addresses as valid-RAM (the ROM will
+; override in its area). Then test for RAM at 2 addresses (see above):
+; F0000 and 08000. This indicates if any RAM is present at all (!), and
+; whether it extends down to address 00000.
+;  The detailed test is then copied into RAM (since we now know the
+; address of at least 1 block), and executed there, with the ROM disabled.
+; The lowest and highest valid RAM addresses are determined, and set up
+; in the CPU's hardware decoder.
+;  Finally, if RAM extends over at least 00000-7FFFF, the ROM is copied to
+; low RAM, and "phantom-ed" there, to speed up processing (since RAM is
+; faster).
+
+; As this routine starts, there is no memory set up, so no stack.
+
+; Map registers affected:-
+;	Register       Locn    Start value     Exit value
+;	CBAR           3A      C8              88
+;	BBR            39      00              Point into RAM as found
+;	CBR            38      00               ditto
+;	RAMLBR         E7      00              Low RAM bound
+;	RAMUBR         E6      FF              High RAM bound
+;	SCR            EF      60 (typ.)       Bit-3 set if ROM shadowed
+
+; Finally, the RAM will be relocated up the 1MB space, if
+;	1. Physical RAM base = 00000, and
+;	2. The ROM is NOT shadowed.
+; This renders accessible the 32kB of RAM that was previously hidden under
+; the ROM, increasing total capacity.
+
+;  Call this routine using the XCALL  IY,MEMSETUP macro, since no stack is
+; available at the time of the call (this routine will define one).
+
+; The final setup will (assuming 64kB or more RAM) put the 3 areas thus:
+;	CA0	Logical 0000-7FFF	ROM
+;	BA	Logical 8000-BFFF	RAM: base+(8000-BFFF)
+;	CA1	Logical C000-FFFF	RAM: base+(C000-FFFF)
+
+;  This setup is "MP/M ready", in that it is only necessary to change CBAR
+; from C8 (the value set by MEMSETUP), to C0, in order to replace the ROM
+; (or its phantom equivalent) by user RAM space. To select different user
+; areas, just change BBR to point to another 48kB "page", anywhere in RAM
+; above the 64kB base-user area. So BBR = CBR, or >= CBR+10H.
+
+RELOCN	 EQU   40H		; RAM relocation factor (* 4kB)
+
+MemSetup:
+	XOR	A
+	OUT0	(RAMLBR),A
+	LD	A,-1
+	OUT0	(RAMUBR),A	; Be sure RAM is valid everywhere
+
+	LD	DE,0
+	LD	A,0F0H
+	XCall	IX,XIsMem	; See if this is RAM
+	JR	NZ,Mx1
+	LD	E,0F0H		; Yes...
+Mx1:	LD	A,8
+	XCall	IX,XIsMem
+	JR	NZ,Mx2
+	LD	D,8
+Mx2:	LD	A,D
+	OR	E		; One must have worked
+	JR	NZ,Mx3
+	HALT		; No RAM in the system!
+
+Mx3:	LD	A,D
+	AND	A		; Is D valid
+	JR	NZ,Mx4
+	LD	A,E		; Then E is
+Mx4:	SUB	8		; Adjust for bank base =8000
+	OUT0	(BBR),A 	; Bank: 8000 logical -> 08000/F0000
+	EX	AF,AF'  	; Save BBR for later
+	LD	HL,memRtn	; Clear of the bottom, in new space
+	LD	SP,HL		; Define a stack
+	EX	DE,HL
+	LD	HL,xMBase
+	LD	BC,MEMRSZE
+	LDIR			; Copy slave routine into RAM
+	LD	HL,0
+	LD	BC,8000H	; Compute ROM checksum
+	XOR	A
+Mx5:	ADD	A,(HL)
+	CPI			; HL++, BC--, set P/V
+	JP	PE,Mx5
+
+	CALL	MemRtn		; Go run it (checksum in A)
+
+;  Now assign the RAM bounds as determined by the call.  They must not be
+; set earlier, as this may (temporarily) render the RAM inaccessible (the
+; ROM overlays). If this happens while we are executing from RAM: disaster!
+
+	OUT0	(RAMLBR),D
+	OUT0	(RAMUBR),E	; Physical RAM extent
+
+	IN0	A,(RAMLBR)
+	AND	A		; RAM present from zero?
+	JR	NZ,Mx6	  	; .No relocn. otherwise
+	IN0	A,(SCR)
+	BIT	3,A		; Nor if ROM is shadowed
+	JR	NZ,Mx6
+
+	LD	B,RELOCN	; OK: relocate the RAM
+
+	IN0	A,(RAMUBR)	; Adjust Upper RAM Limit reg
+	ADD	A,B		;  by increment in B
+	OUT0	(RAMUBR),A
+	IN0	A,(RAMLBR)	; Adjust Lower RAM Limit reg
+	ADD	A,B		;  by increment in B
+	OUT0	(RAMLBR),A
+
+;  Now, set the base of CA1 for the RAM. If 64kB or more, set up logical
+; addr. 0000 -> CA1. If only 32kB, set logical 8000 -> CA1, since ROM
+; cannot run otherwise. BA is set similarly.
+
+Mx6:	LD	C,0		; Adjustment
+	IN0	B,(RAMLBR)
+	IN0	A,(RAMUBR)
+	SUB	B		; RAM range available
+	CP	8		; More than 32kB?
+	JR	NC,Mx7
+	LD	C,8
+Mx7:	LD	A,B		; ie RAMLBR
+	SUB	C		; Adjust base if only 32kB
+
+	IN0	C,(SCR)		; Is the ROM shadowed to 1st 32kB of RAM?
+	BIT	3,C
+	JR	Z,Mx8
+	ADD	A,8		; If so, locate user RAM above it
+Mx8:	OUT0	(CBR),A		; CA1 base value
+	OUT0	(BBR),A		; Bank Area ditto
+
+	LD	A,0C8H		; 0000-7FFF = CA0: ROM
+	OUT0	(CBAR),A	; 8000-BFFF = BA:  RAM
+				; C000-FFFF = CA1: RAM
+	XRetn	IY		; .Back (called without stack)
+
+;-----------------------------------------------------------
+
+xMBase	 EQU   $		; Base of moving code
+xIsMem	 EQU   $+3		; Addr. of ISMEM, locally
+	.PHASE  8200H
+
+MemRtn:	JP	MStart		; Hook the main routine
+
+IsMem:	EXX
+	LD	B,A		; Save A (without stack)
+	LD	HL,0C000H
+	SUB	0CH		; Adjust for CB1 base
+	OUT0	(CBR),A
+	LD	C,(HL)		; Save original memory contents
+	LD	A,55H
+	LD	(HL),A		; Write to "RAM"
+	CP	(HL)		; Correct?
+	JR	NZ,IsM1
+	CPL
+	LD	(HL),A		; Try a new pattern
+	CP	(HL)
+IsM1:	LD	(HL),C		; Restore memory contents
+	LD	A,B		; Recover A, leave F
+	EXX
+	XRetn	IX
+
+mBase:  DB	00, 08, 20H, 80H, -1	; Putative base addresses
+
+MStart:	PUSH	AF		; Save ROM checksum
+	PUSH	IY		; Save IY (incoming "link")
+	IN0	A,(SCR)
+	SET	3,A
+	OUT0	(SCR),A		; ROM turned off
+	LD	IY,mBase
+Ms2:	LD	A,(IY)
+	INC	IY
+	CP	-1
+	JR	NZ,Ms1
+	HALT			; Unable to locate RAM base
+
+; Scan memory, looking for an address "wrap-around", as
+; we hit the un-decoded high address bits.
+
+Ms1:	XCall	IX,IsMem
+	JR	NZ,Ms2		; Physical base
+	POP	IY		; Restore IY (main "link")
+
+	LD	D,A		; Make 2 copies: fixed base
+	LD	E,A		;		 moving ptr.
+	SUB	0CH		; Offset adjust
+	OUT0	(CBR),A
+	LD	HL,0C000H	; Base of CA1
+	LD	(HL),55H	; Test pattern at base
+Ms4:	LD	A,8
+	ADD	A,E		; Next 32kB block
+	LD	E,A
+	JR	C,Ms3		; Oflo from top of 1MB
+	XCall	IX,IsMem	; Is there RAM here?
+	JR	NZ,Ms3		; Out if not, else...
+	LD	(HL),0		; Try to overwrite the base
+	LD	A,D
+	SUB	0CH		; To fixed base
+	OUT0	(CBR),A
+	LD	A,(HL)
+	CP	55H		; Signature still there?
+	JR	Z,Ms4		; .Yes: repeat
+
+Ms3:	DEC	E		; E points at last good block
+
+	IN0	A,(SCR)
+	RES	3,A
+	OUT0	(SCR),A		; ROM active again
+
+	POP	IX		; Balance stack in case we jump to MS6
+	LD	A,D
+	AND	A		; RAM from 00000 (underlays ROM)?
+	JR	NZ,Ms6		; No: can't shadow ROM
+	LD	A,E
+	SUB	D		; Amount of RAM present
+	CP	3FH
+	JR	C,Ms6		; Don't shadow if < 256kB of RAM
+	PUSH	IX		; Put AF back on stack: this branch
+
+; Copy the ROM into RAM, and finally disable it
+
+	PUSH	DE		; Save RAM bounds
+	LD	BC,8000H	; Length of ROM block
+	LD	HL,0		; Start address
+	LD	D,0		; Sumcheck for later
+
+	IN0	E,(SCR)
+Ms5:	RES	3,E
+	OUT0	(SCR),E		; ROM active
+	LD	A,(HL)		; Get 1 byte
+	SET	3,E
+	OUT0	(SCR),E		; RAM on, now
+	LD	(HL),A		; Copy out
+	ADD	A,D
+	LD	D,A		; Accumulate checksum
+	CPI			; HL++, BC--, set P/V bit
+	JP	PE,Ms5		; Loop until BC=0
+
+	POP	IX		; Save DE (stacked above it)
+	POP	AF		; Original ROM checksum
+	PUSH	IX		;   Put DE Back
+	CP	D		; Match?
+	JR	Z,Ms6A
+	IN0	A,(SCR)
+	RES	3,A		; No: we must have the original ROM
+	OUT0	(SCR),A
+Ms6A:	POP	DE		; Return RAM bounds in DE
+
+Ms6:	EX	AF,AF'		; Get the original BBR
+	OUT0	(BBR),A		; Be sure we're in the original stack!
+	RET
+
+MEMRSZE	 EQU   $-MemRtn		; Length to move into RAM
+	.DEPHASE	; Normal addressing, now
+
+	SUBTTL	Command Extensions
+	PAGE
+;===============================================================;
+;      D E B U G  -  C O M M A N D   E X T E N S I O N S        ;
+;===============================================================;
+; Skeleton for DEBUG extension functions
+;   These will typically include system bootstrap, and
+; (eventually) Flash-ROM programming functions.
+
+; On entry, HL is a "function" code:
+
+;   If non-zero, it points at the command key-letter in 
+; the input line. Subfunctions should identify their letter,
+; and branch forward if no match. Finally, return with CY set
+; if error.
+;   If HL=0, each sub-function should display its help message
+; before passing control to its successor. The last should
+; clear CY and return.
+
+ExCom:	JR	Flash		; Try the flash commands
+
+;--------------------------------------------------
+; FLASH-ROM PROGRAMMING (not yet implemented)
+
+; Functions:	1. Move ROM code to high RAM
+;		2. Burn ROM from RAM data
+
+Flash:			; Nothing defined, yet
+	JR	SysBoot		; Try for OS bootstrap
+
+;--------------------------------------------------
+; SYSTEM BOOTSTRAP FUNCTION
+
+;  When this command is executed, the memory is set up thus:
+;	0000-7FFF	ROM
+;	8000-FFFF	RAM
+
+;   This means we cannot load the boot sector at low RAM, so we load it
+; at 8000H. It will then (typically) load CP/M at high RAM, before
+; killing the ROM and jumping to the BIOS start-point.
+
+;   As a safety feature, the boot-sector is sumchecked for original-style
+; system loads.  Once it is successfully read, the checksum is verified, to
+; be sure it really is boot code, before jumping to it.  This code extends
+; the process with a system which simply uses the boot sector to pass data,
+; validating a few selected bytes as an integrity check.
+ 
+BOOTAD	 EQU   8000H		; Boot-load point
+
+SysBoot: LD	A,H
+	OR	L		; HL null?
+	JR	NZ,TBoot
+	LD	HL,btHelp
+	CALL	PutMsg		; Yes: display the help
+	LD	HL,0
+	JP	TConfg		; .To successor
+
+TBoot:	LD	A,(HL)
+	CP	'Z'		; Was it a boot command?
+	JP	NZ,TConfg	; .No: leave it to the next Comnd
+
+; This command is for me...
+
+	XOR	A
+	LD	(OsEx),A	; Ensure "Return" flag is clear
+
+	CALL	GetNum		; Try for drive
+	LD	A,E
+	CP	1		;- Boot Only Floppy Drive?
+	JP	Z,FDBOOT	;-
+	CP	2		;- Boot Only SCSI?
+	JR	NZ,TBoot0 	;- ..jump if Not
+	CALL	CkSCSI	 	;- Else check for presence
+	CALL	Z,BtSCSI 	;-  Try to boot if it exists
+	JR	No	 	;- ..else return Error
+
+TBoot0:	CP	3		;- Boot Only GIDE?
+	JR	NZ,TBoot1 	;- ..jump if Not
+	CALL	InGIDE	 	;- Else Check presence and Initialize
+	CALL	Z,BtGIDE 	;-  Try to boot if it exists
+	JR	No	 	;- ..else return Error
+
+TBoot1:	CALL	BootAll		;- ..if Not, Boot Whatever is there
+No:	SCF			; Invalid...
+	RET
+
+btHelp:	DB	'Z                 Boot First Available Device',CR
+	DB	'  Z 1               Boot from Floppy Drive 0', CR
+	DB	'  Z 2               Boot from SCSI, Unit 0', CR
+	DB	'  Z 3               Boot from GIDE, Master', CR, 0
+
+;--------------------------------------------------
+; SETUP (Configure) NON-VOLATILE RAM FUNCTION
+
+TConfg:	LD	A,H		;-
+	OR	L		;- Null = Help?
+	JR	NZ,TConf0	;-
+	LD	HL,cfHelp	;-
+	CALL	PutMsg		;- Yes: Display Help
+	LD	HL,0		;-
+	JR	TDTim		;-
+
+TConf0:	LD	A,(HL)		;-
+	CP	'S'		;- Setup Command?
+	JR	NZ,TDTim	;-  No: Leave to Next Comnd
+	JP	TCfg		;- Yes: Configure Clock RAM
+
+cfHelp:	DB	'S                 Setup DS1202 RAM Parameters', CR, 0
+
+;---------------------------------------------------
+; Display/Set DS-1202/1302 Date/Time
+
+TDTim:	LD	A,H		;-
+	OR	L		;- Help?
+	JR	NZ,TDTim0	;- ..jump if Not
+	LD	HL,dtHelp	;-
+	CALL	PutMsg		;- Yes: Display Help
+	LD	HL,0		;-
+	JR	LoadRet		;- Continue to next command
+
+TDTim0:	LD	A,(HL)		;-
+	CP	'T'		;- Show/Set Date/Time?
+	JR	NZ,LoadRet	;-  No: Leave to Next Command
+	JP	DTim		;- Yes: Work the Clock
+
+dtHelp:	DB	'T                 Display Date/Time', CR
+	DB	'  T S               Set Date/Time',CR,0
+
+;--------------------------------------------------------------------
+; ROMv5.0 Mods                                                   TAG
+;
+; New Command - Load and Return.
+; Load the OS from the System Tracks, then return to the Debugger.
+LoadRet:
+	ld	a,h		; See if doing Help display
+	or	l
+	jr	nz,SetLd	; No, try loading OS
+	ld	hl,LrHelp	; Yes - Display help message
+	call	PutMsg
+	ld	hl,0		; Flag for next command Help message
+	jp	Next		;  Do next command help
+
+SetLd:	ld	a,1
+	ld	(OsEx),a	; Set flag for 'Load and Return'
+	call	GetNum		; Drive type appended?
+	ld	a,e
+	cp	1		; Assume Floppy Load
+	jp	z,FDBOOT	;  and go if 'L 1' entered
+	cp	2		; Assume SCSI load
+	jr	nz,LBoot0	;  and go if 'L 2' not entered
+	call	CkSCSI		; See if SCSI present
+	jp	z,BtSCSI	; Load the OS if so
+BadLd:	ld	hl,BadMsg	; No OS was loaded, so display the
+	call	PutMsg		;  error and exit to the debugger
+	jp	ComOk
+LBoot0:	cp	3		; Was 'L 3' entered ?
+	jp	nz,BAM		; Go if not 'L 3' for GIDE
+	call	InGIDE		; Else, check GIDE ready
+	jp	z,BtGIDE	; If OK, load GIDE
+	jr	BadLd		; else, flag the error and exit
+				;  else, fall through...
+; The OS loaders will return here if 'Load and Return' was executed.
+; HL contains the OS Execution Address.
+LrEnt:
+	ld	de,LdAdd	; Put ASCII OS execute address here
+	call	PutHL		; Convert HL to ASCII string at (DE)
+	ld	hl,LdMsg	; Point to msg
+	call	PutMsg		;  and display
+	jp	DbgLin		; Re-enter the debugger
+
+LrHelp:	db	'L                 Load OS (First Available) and'
+	db	' return to DEBUG',cr
+	db	'  L 1               Load from Floppy Drive 0',cr
+	db	'  L 2               Load from SCSI, Unit 0',cr
+	db	'  L 3               Load from GIDE, Master',cr,0
+
+LdMsg:	db	bell,'Boot Track(s) loaded @ 8100H.  Execute via G '
+LdAdd:	db	'xxxx ',cr,0
+BadMsg:	db	bell,'Nothing Loaded',cr,0
+
+;---------------------------------------------------
+; Next Function (actually the end)
+
+Next:	LD	A,H		; Finish: just a HELP ?
+	OR	L
+	RET	Z		; If so, return success
+	SCF			; .Else: fail (no-one took it)
+	RET
+
+	INCLUDE DISKOP.180
+	INCLUDE	SCSI.180	;; SCSI Routines
+	INCLUDE	GIDE.180	;- GIDE (IDE/ATA) Routines
+	INCLUDE	CLKRAM.180	;- DS-1202 Clock RAM Routines
+	INCLUDE	DATTIM.180	;- DS-1202 Clock Read/Set Routines
+	INCLUDE DEBUG.180
+	END
+

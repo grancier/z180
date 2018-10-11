@@ -1,0 +1,390 @@
+;=======================================================;
+; DS-1202/1302 Clock Read/Set routines			;
+;=======================================================;
+;  Read the Clock to a buffer area in Memory.  Seven bytes are
+; read in burst mode from the clock chip, one bit at a time.
+; The Clock is accessed serially (LSB first) one byte at a time
+; with a command byte being written to begin the Read/Write.
+; Burst Mode is used with a 0BFH Command byte for Reading, 0BEH
+; for Writing.  The chip is reset to Read-Only when finished.
+;  The Entire Date/Time String is eight bytes read as:
+;
+;	Sec   Min   Hour   Day   Mon   DOW   Year   WProt
+;                  (12/24)                          (MSB)
+;
+; In this implementation, the 12/24 hour bit is always set to
+; 24-hour mode by clearing the MSB.
+;-------------------------------------------------------------
+
+DTim:	CALL	GetCh		; Skip Spaces, return next char/EOL
+	JP	Z,RTime		; ..Read & Display Date/Time if No Arg
+	CP	'S'		; Set?
+	JR	Z,STime		; ..jump if Yes
+	CP	's'
+	JR	Z,STime		; ..jump if LC "y" also
+	OR	0FFH		; Else Set Error Return
+	RET
+
+;.....
+; Prompt for Date/Time and Set the Clock
+
+dtStr:	DEFB	CR,'Enter Date (mm/dd/yy or dd.mm.yy) : ',0
+
+STime:	LD	HL,dtStr
+	CALL	PutMsg		; Prompt for Date
+	CALL	GetLin		;  Get response
+	DEC	HL
+SDTim:	INC	HL		; Skip leading spaces
+	LD	A,(HL)
+	CP	' '		; Space?
+	JR	Z,SDTim		; ..loop if Yes
+	LD	BC,0		; Init Day/Month Regs
+	CALL	XNum		; Get first number
+	JR	C,STErr0	; ..err if Bad
+	CP	'.'		; ddmmyy form?
+	JR	NZ,SDTim0	; ..jump if No to try US Form
+	LD	C,E		; Save Day
+	INC	HL
+	CALL	XNum		; Get next Number
+	JR	C,STErr0	; ..err if Bad
+	LD	B,E		; Save Month
+	JR	SDTim1		; ..jump to continue w/Year
+
+SDTim0:	CP	'/'		; US Form?
+	JR	NZ,STErr0	; ..err if Not
+	LD	B,E		; Save Month
+	INC	HL
+	CALL	XNum		; Get Next Number
+	JR	C,STErr0	; ..err if Bad
+	LD	C,E		; Save Day
+SDTim1:	INC	HL
+	CALL	XNum		; Get Next Number
+	JR	C,STErr0	; ..err if Bad
+	CP	CR		; EOL?
+	JR	NZ,STErr0	; ..err if Not end
+	LD	HL,timAry+3	; Pt to Day
+	LD	(HL),C		;  save
+	INC	HL
+	LD	(HL),B		;   save Month
+	INC	HL
+	INC	HL		;      (skip DOW)
+	LD	(HL),E		;    save Year
+	JR	SDTim2		; ..continue w/DOW & Time
+
+stErM0:	DEFB	BELL,'--- Error in Date String',0
+
+STErr0:	LD	HL,stErM0
+	CALL	PutMsg		; Print Error message
+	JR	STime		; ..and Try again
+
+dowStr:	DEFB	'Day of Week (0=Sun 1=Mon ... 6=Sat)  : ',0
+
+SDTim2:	LD	HL,dowStr	; Prompt for DOW
+	CALL	PutMsg
+SDTim3:	CALL	GetChU		; Get byte in UCase
+	CALL	IsNum		; Digit?
+	JR	NC,SDTim5	; ..jump if Yes
+SDTim4:	CALL	Squawk		; Else Beep
+	JR	SDTim3		; ..and try again
+
+SDTim5:	CP	7		; Legal DOW digit?
+	JR	NC,SDTim4	; ..jump if No
+	INC	A		;  (base 1)
+	LD	(timAry+5),A	; Else save in String
+	ADD	A,'0'-1		;  make Ascii again
+	CALL	PutChr		;   echo
+
+STimeT:	LD	HL,tmStr
+	CALL	PutMsg		; Prompt for Time
+	CALL	GetLin
+	DEC	HL
+SDTim6:	INC	HL		; Skip leading Spaces
+	LD	A,(HL)
+	CP	' '
+	JR	Z,SDTim6	; ..loop while spaces
+	CALL	XNum		; Extract first number
+	JR	C,STErr1	; ..Err if Bad number
+	CP	CR		; Premature EOL?
+	JR	Z,STErr1	; ..Err if Yes
+	LD	B,E		; Save Hrs
+	INC	HL
+	CALL	XNum		; Extract second number
+	JR	C,STErr1	; ..Err if Bad
+	LD	C,E
+	LD	E,0		; prepare default Secs
+	CP	CR		; EOL?
+	JR	Z,SDTim7	; ..exit to set if Yes
+	INC	HL
+	CALL	XNum		; Else get Secs
+	JR	C,STErr1	; ..Err if Bad
+	CP	CR		; EOL?
+	JR	NZ,STErr1	; ..Err if No
+SDTim7:	LD	HL,timAry
+	LD	(HL),E		; Save Secs
+	INC	HL
+	LD	(HL),C		;  Minutes
+	INC	HL
+	LD	(HL),B		;   & Hours
+
+	LD	A,8EH
+	CALL	WrCmd		; Write-Protect Off
+	XOR	A
+	CALL	WrExx		;  by Clearing MSB
+
+	LD	A,0BEH		; Burst Write
+	LD	B,7		;  7 time bytes
+	CALL	WrCmd
+	LD	HL,timAry
+SDTim8:	LD	A,(HL)		; Get Byte
+	CALL	WrDatV		;  write
+	INC	HL		;   bump
+	DJNZ	SDTim8		;  ..loop til done
+	LD	A,80H		; Get WrtPrt
+	CALL	WrExx		;  write and disable writing
+
+; The Date and Time are Now Set.  Read back and Display
+
+	LD	HL,tmFini
+	CALL	PutMsg		; Say we're done
+	JR	RTime		; ..jump to read and display
+
+;.....
+; Errors in Time String vector here and restart
+
+STErr1:	LD	HL,stErM1
+	CALL	PutMsg		; Print Error message
+	JR	STimeT		; ..and Try again
+
+tmStr:	DEFB	CR,'Enter Time (hh:mm[:ss])           : ',0
+tmFini:	DEFB	CR,'Date/Time set to:',CR,0
+stErM1:	DEFB	BELL,'--- Error in Time String',0
+
+;.....
+; Read Clock and Display Date/Time
+
+RTime:	LD	HL,timAry	; Point to Date/Time Array
+	CALL	RdClk		;  Read!
+
+	LD	A,(timAry+5)	; Get Day-Of-Week Byte
+	OR	A		; Error Type #1 (0)?
+	JR	Z,DTimEr	; ..jump to Exit if Yes
+	CP	8		; Error Type #2 (>7, probably FF)?
+	JP	C,DTim0		; ..jump if Ok
+DTimEr:	LD	HL,tErr0
+	CALL	PutMsg		;  Else Print Error Message
+	XOR	A		;   return Ok
+	RET
+
+tErr0:	DEFB	CR,'+++ Invalid Clock Data',CR,0
+
+dowAry:	DEFB	'Sunday,    ',0
+DOWLEN	  EQU  $-dowAry
+	DEFB	'Monday,    ',0
+	DEFB	'Tuesday,   ',0
+	DEFB	'Wednesday, ',0
+	DEFB	'Thursday,  ',0
+	DEFB	'Friday,    ',0
+	DEFB	'Saturday,  ',0
+
+monTbl:	DEFW	mon0, mon1, mon2,  mon3	; Vectors to Strings
+	DEFW	mon4, mon5, mon6,  mon7
+	DEFW	mon8, mon9, mon10, mon11
+	DEFW	mon12
+
+mon0:	DEFB	'January',0
+mon1:	DEFB	'February',0
+mon2:	DEFB	'March',0
+mon3:	DEFB	'April',0
+mon4:	DEFB	'May',0
+mon5:	DEFB	'June',0
+mon6:	DEFB	'July',0
+mon7:	DEFB	'August',0
+mon8:	DEFB	'September',0
+mon9:	DEFB	'October',0
+mon10:	DEFB	'November',0
+mon11:	DEFB	'December',0
+mon12:	DEFB	'--Bad--',0
+
+cen20:	DEFB	' 19',0
+cen21:	DEFB	' 20',0
+
+DTim0:	DEC	A		; Correct to Base 0
+	LD	E,A		;  Multiply DOW
+	LD	D,DOWLEN	;   by length
+	MLT	DE		;    of String
+	LD	HL,dowAry	;     elements
+	ADD	HL,DE
+	CALL	PutMsg		;      Print
+
+	LD	A,(timAry+3)	; Day of Month
+	CALL	PrBCDf		;  Print BCD Value (floating width)
+	LD	A,' '
+	CALL	PutChr
+
+	LD	A,(timAry+4)	; Get Month Byte
+	PUSH	AF		; Save byte
+	AND	0FH		;  keep low nibble
+	LD	C,A
+	POP	AF
+	BIT	4,A		; >= 10H?
+	LD	A,10		;  (assume Yes)
+	JR	NZ,DTim1	; ..jump if Yes
+	XOR	A		;    Else set 0
+DTim1:	ADD	A,C		;     add low nibble
+	DEC	A		;      compensate for Base 0
+	CP	12		; Too large?
+	JR	C,DTim10	; ..jump if No
+	LD	A,12		;    Else set Error String
+DTim10:	ADD	A,A		;  double for word vectors
+	LD	C,A
+	LD	B,0		;   make Word
+	LD	HL,monTbl
+	ADD	HL,BC		;    index into table
+	LD	A,(HL)		; Fetch Lo Byte
+	INC	HL
+	LD	H,(HL)		;  Hi
+	LD	L,A		;   Pos'n
+	CALL	PutMsg		;    Print
+
+	LD	A,(timAry+6)	; Get Year Byte
+	LD	HL,cen20	;  (prepare for 1900s)
+	CP	76H		; 20th Century?
+	JR	NC,DTim2	; ..jump if Yes
+	LD	HL,cen21	; Else year = 20xx
+DTim2:	PUSH	AF
+	CALL	PutMsg		; Print Century leadin
+	POP	AF
+	CALL	PrBCD2		;  and last two digits
+
+	LD	HL,spac8	; Print separater
+	CALL	PutMsg
+
+	LD	HL,timAry+2
+	LD	A,(HL)		; Fetch Hours
+	AND	7FH		;  Strip any 12/24 hr bit
+	CALL	PrBCDf
+	DEC	HL
+	LD	A,':'		;   (separator)
+	CALL	PutChr
+	LD	A,(HL)
+	CALL	PrBCD2		;    Print Minutes
+	DEC	HL
+	LD	A,':'		;     (separator)
+	CALL	PutChr
+	LD	A,(HL)
+	CALL	PrBCD2		;      Print Seconds
+	LD	A,CR
+	CALL	PutChri		;  ..exit on new line
+	XOR	A		;     showing Ok
+	RET
+
+spac8:	DEFB	'        ',0
+
+;.....
+; Read the Date/Time String from the DS-1202/1302 Clock Chip to
+; Memory Array
+
+RdClk:	LD	A,0BFH		; Load the Burst Clock Read Command
+	CALL	WrCmd		;  and Send it
+
+; Read the Clock Data.  D still 0 from above Load, use as Byte Index
+
+	LD	C,7		; Abort after the Seven Date/Time Bytes
+	DI			;  (Insure No Ints)
+RDTim0:	LD	B,8		; Gather 8 bits for a byte
+RDTim1:	IN0	A,(DRA)		; Read Port
+	RES	RTCClk,A	;  Clock LO
+	OUT0	(DRA),A		;   Set
+	NOP			;    (settle)
+	IN0	A,(DRA)		;     Read Bit to LSB
+	RRCA			; Data Bit to Carry
+	RR	E		;  to MSB of Accum
+	RLCA			;   restore Parallel Port bits
+	SET	RTCClk,A	; Clock HI
+	OUT0	(DRA),A		;  Set
+	DJNZ	RDTim1		; ..loop if Byte Not Done
+
+	LD	(HL),E		; Save value in output string
+	INC	HL		;  move to previous byte in output
+	DEC	C		;   Last Byte?
+	JR	NZ,RDTim0	; ..get another byte if Not
+
+	IN0	A,(DRA)		; Fetch Parallel Port
+	SET	RTCClk,A	;  Clk to HI
+	OUT0	(DRA),A 
+	RES	RTCRst,A	;   Reset Active LO
+	OUT0	(DRA),A
+	EI			;    (Ints Ok Now)
+	RET			;   and Quit
+
+;.....
+; Print value in A as one or two digits.  Secondary entry to print 2 digits
+
+PrBCDf:	CP	10H		; Only One digit?
+	JR	C,PrBCD1	; ..jump if Yes
+			;..fall thru to print 2 digits
+PrBCD2:	PUSH	AF		; Else save
+	RRA
+	RRA
+	RRA			;  High nibble to Low
+	RRA
+	CALL	PrBCD1		;   Print
+	POP	AF		;    restore byte
+PrBCD1:	AND	0FH		; Mask
+	ADD	A,90H
+	DAA
+	ADC	A,40H		;  Make Ascii
+	DAA
+	JP	PutChr		; ..print and return thru stack
+
+;.....
+; Test byte for valid Hex char, convert, return Error if Bad
+; Enter: A = Candidate Byte (Uppercase only)
+; Exit : A = Binary value, Carry Clear (NC) if valid
+;		Carry Set (C) if invalid Hex digit
+
+IsHex:	SUB	'0'
+	RET	C		; Error if < 30H
+	CP	9+1		; < 10?
+	CCF
+	RET	NC		;  return Ok if Yes
+	SUB	'A'-'9'+1	;   9 < x < ('A'-'0')?
+	RET	C		;    return Error if Yes
+	CP	16		;     > 0FH?
+	CCF			;      return Error if Yes
+	RET			;     ..else return Ok
+
+;.....
+; Extract Hex number from string returning BCD byte or delimiter
+; Enter: HL -> CR-terminated String
+; Exit : E = BCD Byte, or 0 (Only least two digits), Carry Clear (NC) if Ok
+;		Carry Set (C) if Invalid Hex characters
+;	 A = Delimiter character
+;	HL -> byte that ended scan
+; Uses : AF,DE,HL
+
+XNum:	LD	E,0		; Set default return value
+XNum0:	LD	A,(HL)		; Get Byte
+	CP	CR		; EOL?
+	RET	Z
+	CP	':'		; Time Delimiter?
+	RET	Z
+	CP	'.'		; European Date Delimiter?
+	RET	Z
+	CP	'/'		; US Date Delimiter?
+	RET	Z
+	CALL	IsHex		; Else try to convert to Hex
+	RET	C		; ..return if Error
+	EX	DE,HL
+	ADD	HL,HL		; Mult Accum by 2
+	ADD	HL,HL		;  * 4
+	ADD	HL,HL		;   * 6
+	ADD	HL,HL		;    * 8
+	ADD	A,L		;     Add in new BCD Digit
+	LD	L,A
+	EX	DE,HL
+	INC	HL		; Pt to next
+	JR	XNum0		; ..loop til done
+
+;=============== End of DATTIM.INC ===================
+

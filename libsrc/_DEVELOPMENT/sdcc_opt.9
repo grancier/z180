@@ -1,0 +1,12 @@
+
+;;
+;; sdcc bugfixes
+;;
+
+%"[ \t]*"0jp%"[ \t]+"1____sdcc_z80_pop_ei
+=
+	jp	____sdcc_z80_pop_ei_jp
+
+%"[ \t]*"0jp%"[ \tNZCMPOE]+"1,%"[ \t]*"2____sdcc_z80_pop_ei
+=
+	jp%1, ____sdcc_z80_pop_ei_jp

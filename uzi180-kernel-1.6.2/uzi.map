@@ -1,0 +1,153 @@
+Machine type is Z80
+
+start.obj       text          100        3
+data.obj        data         6A81       5E	bss          9000     267A
+z180asm.obj     text          103       44
+machasm.obj     text          147       E7	common       F000      BF2
+machdep.obj     text          22E      327	data         6ADF      100
+filesys.obj     text          555     17CC	data         6BDF      13D
+process.obj     text         1D21      77A	data         6D1C      135
+		bss          B67A        4
+procasm.obj     text         249B      15D	data         6E51       1D
+		bss          B67E        A
+scall1a.obj     text         25F8      85E	data         6E6E       15
+scall1b.obj     text         2E56      4D9
+scall1c.obj     text         332F      CDF
+scall2.obj      text         400E      A7F	data         6E83       13
+devtty.obj      text         4A8D      7C0	data         6E96       30
+		bss          B688      138
+devio.obj       text         524D      8AF	data         6EC6      1A1
+devhd.obj       text         5AFC      474	data         7067       42
+		bss          B7C0       20
+hdasm.obj       text         5F70       C1	bss          B7E0        3
+devmisc.obj     text         6031      221	data         70A9        1
+devflop.obj     text         6252      23A	data         70AA       38
+flopasm.obj     text         648C      2CD	data         70E2       2B
+		bss          B7E3       1F
+utils.obj       text         6759      21A
+emu.obj         cpm22        E600      862
+
+libc.lib
+asar.obj        text         6973        F
+brelop.obj      text         6982       14
+wrelop.obj      text         6996        F
+idiv.obj        text         69A5       68
+imul.obj        text         6A0D       1F
+shar.obj        text         6A2C       10
+shll.obj        text         6A3C        D
+shlr.obj        text         6A49       10
+csv.obj         text         6A59       28
+
+TOTAL		Name         Link     Load   Length
+		(abs)           0        0        0
+		text          100        0     6981
+		data         6A81     6981      68C
+		bss          9000        0     2802
+		common       F000     700D      BF2
+		cpm22        E600     7BFF      862
+
+                                  Symbol Table
+
+__Bbss      bss    0000  __Btext     text   0000  __Ltext     text   0100
+_init       text   0100  _init0      text   0103  _initsys    text   0147
+_fs_init    text   022E  _valadr     text   023F  _addtick    text   0277
+_incrtick   text   02EB  _rdtime     text   031F  _sttime     text   0340
+_panic      text   0349  _warning    text   036E  _idump      text   0382
+_n_open     text   0555  _srch_dir   text   0752  CPMSIZ      (abs)  07A1
+_srch_mt    text   0860  _i_open     text   08E7  _ch_link    text   0B02
+_filename   text   0CAF  _namecomp   text   0D35  _newfile    text   0DAA
+_getdev     text   0E93  _baddev     text   0EED  _i_alloc    text   0F0A
+_i_free     text   110D  _blk_alloc  text   1196  _blk_free   text   132D
+_oft_alloc  text   13EC  _oft_deref  text   1456  _uf_alloc   text   148D
+_i_ref      text   14D2  _i_deref    text   1502  _wr_inode   text   1624
+_isdevice   text   16C5  _devnum     text   16DE  _f_trunc    text   16F2
+_freeblk    text   17C6  _bmap       text   185F  _validblk   text   1A88
+_getinode   text   1ADB  _super      text   1B79  _getperm    text   1B84
+_setftime   text   1BF2  _getmode    text   1C3D  _fmount     text   1C56
+_magic      text   1D01  _init2      text   1D21  _psleep     text   1EA1
+_wakeup     text   1F03  _getproc    text   1F5D  _newproc    text   1FBB
+_ptab_alloc text   20C5  _clkint2    text   2182  _unix2      text   225F
+_chksigs    text   22E2  _sgrpsig    text   23AA  _ssig       text   23F7
+_swapout    text   249B  _swapin     text   24D4  _dofork     text   2546
+__open      text   25F8  __close     text   277B  _doclose    text   2784
+__creat     text   27F7  __pipe      text   29CA  __link      text   2B30
+__unlink    text   2C52  __read      text   2D63  __write     text   2D8A
+_rwsetup    text   2DB1  _readi      text   2E56  _writei     text   30D6
+_min        text   332F  _psize      text   3356  _addoff     text   3379
+_updoff     text   349B  __seek      text   34CA  __chdir     text   3666
+__mknod     text   36B1  __sync      text   378B  __access    text   3884
+__chmod     text   3949  __chown     text   39EA  __utime     text   3A54
+__stat      text   3AEC  __fstat     text   3B20  _stcpy      text   3B5A
+__dup       text   3C0A  __dup2      text   3C63  __umask     text   3CCE
+__getfsys   text   3CEE  __ioctl     text   3D5C  __mount     text   3DC1
+__umount    text   3EEE  __getpid    text   400E  __getppid   text   401E
+__getuid    text   4034  __geteuid   text   4044  __getgid    text   4048
+__getegid   text   404C  __setuid    text   4050  __setgid    text   4092
+__time      text   40BC  __stime     text   40DC  __times     text   40E6
+__execve    text   4156  _wargs      text   4470  _rargs      text   4532
+__brk       text   4626  __sbrk      text   464B  __wait      text   467B
+___exit     text   47A0  _doexit     text   47AE  __fork      text   48C8
+__pause     text   48CB  __signal    text   48DD  __kill      text   49A9
+__alarm     text   4A61  _tty_read   text   4A8D  _tty_write  text   4BE6
+_tty_open   text   4D20  _tty_close  text   4D6D  _tty_ioctl  text   4D90
+_tty_inproc text   4EF4  _echo       text   521D  _bread      text   524D
+_brelse     text   52E2  _bawrite    text   52F6  _bfree      text   530A
+_tmpbuf     text   5361  _zerobuf    text   5394  _bufsync    text   53BA
+_bfind      text   5407  _freebuf    text   5459  _bufinit    text   550E
+_bufdump    text   553C  _bdread     text   55AE  _bdwrite    text   5620
+_cdread     text   5692  _cdwrite    text   56E0  _swapread   text   572E
+_swapwrite  text   5780  _d_open     text   57D2  _d_close    text   5819
+_d_ioctl    text   5861  _ok         text   58CA  _nogood     text   58CE
+_validdev   text   58D2  _insq       text   58F6  _remq       text   5989
+_clrq       text   5A07  _uninsq     text   5A32  _fullq      text   5AC1
+_wd_read    text   5AFC  _wd_write   text   5B3E  _setup      text   5B7B
+_chkstat    text   5C7A  _wd_open    text   5CB1  _wd_init    text   5CD0
+_scsiop     text   5F70  _mem_read   text   6031  _mem_write  text   6080
+_mem_ioctl  text   60CF  _proc_read  text   60D9  _proc_write text   6147
+_proc_ioctl text   6151  _null_read  text   619B  _null_write text   61A5
+_zero_read  text   61A9  _zero_write text   61C8  _lpr_open   text   61D2
+_lpr_close  text   61DB  _lpr_write  text   61E9  _mt_read    text   6242
+_mt_write   text   6246  _mt_open    text   624A  _mt_close   text   624E
+_fd_read    text   6252  _fd_write   text   6270  _fd         text   628E
+_fd_open    text   6449  _fd_close   text   646D  _fd_ioctl   text   6488
+_fdInit     text   648C  _fdread0    text   64E6  _fdwrite0   text   64E9
+_FdcCk      text   6737  _shift8     text   6759  _puts       text   6761
+_kprintf    text   679F  _abort      text   6850  _itob       text   6854
+_strlen     text   692D  _bzero      text   693B  _bcopy      text   6950
+asar        text   6973  __Bdata     data   6981  brelop      text   6982
+wrelop      text   6996  amod        text   69A5  lmod        text   69AA
+ldiv        text   69AF  adiv        text   69B4  amul        text   6A0D
+lmul        text   6A0D  shar        text   6A2C  shal        text   6A3C
+shll        text   6A3C  shlr        text   6A49  csv         text   6A59
+cret        text   6A65  indir       text   6A6C  ncsv        text   6A6D
+__Htext     text   6A81  __Ldata     data   6A81  _disp_tab   data   6A81
+_ncalls     data   6ADD  _ttydflt    data   6E96  _ttyinq     data   6EA2
+_bufclock   data   6FAA  __Bcommon   common 700D  _cmdblk     data   7067
+_hd_offset  data   706D  _dptr       data   706F  _dlen       data   7071
+_cptr       data   7073  _busid      data   7075  _secsiz     data   70AA
+_dTbl       data   70E2  __Hdata     data   710D  __Bcpm22    cpm22  7BFF
+__Lbss      bss    9000  _sec        bss    9000  _runticks   bss    9002
+_bufpool    bss    9004  _swapblk    bss    A44A  _swapbase   bss    A44C
+_tod        bss    A44E  _procmem    bss    A452  _stderr     bss    A454
+_ramsize    bss    A456  _ptab       bss    A458  _waitno     bss    A7A0
+_swapcnt    bss    A7A2  _ROOTDEV    bss    A7A4  _of_tab     bss    A7A6
+_stdin      bss    A81E  _fs_tab     bss    A820  _i_tab      bss    B0CC
+_initproc   bss    B66C  _maxproc    bss    B66E  _stdout     bss    B670
+_root       bss    B672  _inint      bss    B674  _ticks      bss    B676
+_newid      bss    B684  _stopflag   bss    B688  _tbuf1      bss    B68E
+_tbuf2      bss    B712  _flshflag   bss    B796  _ttydata    bss    B79C
+_hd_size    bss    B7C0  _hd_start   bss    B7D0  _hdhds      bss    B7E1
+_hdspt      bss    B7E2  _fsector    bss    B7FD  _ftrack     bss    B7FE
+_ferror     bss    B7FF  _fbuf       bss    B800  __Hbss      bss    B802
+EStart      cpm22  E600  __Lcpm22    cpm22  E600  __bdos      cpm22  E6C1
+__bios      cpm22  EC00  __Hcpm22    cpm22  EE62  __Lcommon   common F000
+_ub         common F000  __putc      common F804  __cin       common F823
+_rdtod      common F852  _lpout      common F949  _tempstack  common F964
+_unix       common F969  _IRET       common F9C4  _doexec     common F9D6
+_ugets      common FA25  _uput       common FA77  _uget       common FA88
+_uzero      common FAE1  _ugetw      common FB08  _uputw      common FB20
+_ugetc      common FB3F  _uputc      common FB56  _di         common FB6D
+_ei         common FB6F  _uzicom     common FB76  _osBank     common FB78
+__Hcommon   common FBF2  mon_start   common F316  mon_ept     common F322
+trap_ept    common F5B3  
+

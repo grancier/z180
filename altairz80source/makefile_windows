@@ -1,0 +1,12 @@
+# simple makefile for altairz80 for MINGW on Windows
+
+GCC = gcc
+OPT = -O3
+
+OBJS = altairz80_cpu_nommu.o altairz80_cpu.o altairz80_dsk.o altairz80_hdsk.o altairz80_net.o altairz80_sio.o altairz80_sys.o disasm.o flashwriter2.o i86_decode.o i86_ops.o i86_prim_ops.o i8272.o s100_if3.o insnsd.o mfdc.o s100_disk1a.o s100_disk2.o s100_fif.o s100_mdriveh.o s100_mdsad.o s100_selchan.o s100_ss1.o scp.o sim_console.o sim_fio.o sim_imd.o sim_sock.o sim_timer.o sim_tmxr.o vfdhd.o n8vem.o wd179x.o s100_64fdc.o s100_scp300f.o s100_adcs6.o s100_hdc1001.o s100_disk3.o
+
+altairz80.exe: $(OBJS)
+	$(GCC) $^ -lwsock32 -lwinmm -o $@
+
+%.o: %.c altairz80_defs.h i86.h i8272.h insns.h mfdc.h nasm.h scp.h sim_console.h sim_defs.h sim_fio.h sim_imd.h sim_rev.h sim_sock.h sim_timer.h sim_tmxr.h vfdhd.h wd179x.h
+	$(GCC) $(OPT) -DNEED_SIM_VM_INIT -c -o $@ $<

@@ -1,0 +1,1211 @@
+	SUBTTL	Battery-Backed Clock RAM Routines (CLKRAM.180)
+	PAGE
+;===============================================================;
+;     N o n - V o l a t i l e    R A M    R o u t i n e s	;
+;===============================================================;
+; 24 Data bytes are accessible, addressed by sending a command of the format:
+;	11xxxxxM B
+;	  |||||+-- 1 = Read, 0 = Write
+;	  +++++--- Desired Byte number 0 (00000B) to 23 (10111B)
+; After sending the Command, data may be read from, or written to the chip.
+;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+; Data Allocations:
+;  Byte 0: Smmiinnn	Basic System Data
+;	   |||||+++- Indexed Console Baud Rate (300-38,400 BPS)
+;	   |||++---- Additional IO Wait States (00=0, 01=1, 10=2, 11=3)
+;	   |++------ Additional Memory Wait States (00=0, 01=1, 10=2, 11=3)
+;	   +-------- 1 = Hi-Speed CPU Clock,  = Lo-Speed CPU Clock
+;
+;	1: xxxxxxxx	Floppy Unit 0 Hardware Characteristics
+;	   ||||||++- 00 = 8" Drive; 01 = 5" 40-Trk, 10 = 5" 80-Trk, 11 = 3"
+;	   |||||+--- 1 = Single-Sided, 0 = Double-Sided
+;	   ||+++----  (reserved)
+;	   |+------- 1 = Motor Control Needed, 0 = No Motor Control
+;	   +-------- 1 = "High-Density", 0 = "Normal" MFM Only
+;
+;	2: hhhhssss	Floppy Unit 0 Timing Values
+;	   ||||++++- Step Rate (1-15) in 1 mS increments
+;	   ++++----- Head Load Time (4-60) in 4 mS increments
+;
+;	3: xxxxxxxx	Floppy Unit 1 Hardware Characteristics
+;	   ||||||++- 00 = 8" Drive; 01 = 5" 40-Trk, 10 = 5" 80-Trk, 11 = 3"
+;	   |||||+--- 1 = Single-Sided, 0 = Double-Sided
+;	   ||+++----  (reserved)
+;	   |+------- 1 = Motor Control Needed, 0 = No Motor Control
+;	   +-------- 1 = "High-Density", 0 = "Normal" MFM Only
+;
+;	4: hhhhssss	Floppy Unit 1 Timing Values
+;	   ||||++++- Step Rate (1-15) in 1 mS increments
+;	   ++++----- Head Load Time (4-60) in 4 mS increments
+;
+;	5: Hard Drive Type.  Binary byte 0 = (None)
+;		1 = Adaptec ACB-4000A	2 = Seagate SCSI    3 = Conner SCSI
+;		4 = Quantum SCSI	5 = Maxtor SCSI     6 = Syquest SCSI
+;		80H = GIDE (IDE/ATA)
+;
+;	6: Hard Drive - Number of Tracks (Low)		(Needed for GIDE)
+;	7:  "     "       "    "    "    (Hi)
+;	8: Hard Drive - Number of Heads			(Needed for GIDE)
+;	9: Hard Drive - Number of Sectors-per-Track	(Needed for GIDE)
+;
+;       10: xxxxxxxH    System Operating Flags
+;                  +- Hardware flow control. 1=Active, 0=None
+;
+;	11..22: (reserved)
+;
+;	23: Checksum Byte. 2's complement of sum of bytes 0..22 MOD 256
+;-------------------------------------------------------------------------
+; Check for probable existance of DS-1202/1302 Clock chip by testing for
+; All "0" or all "1" bits in the RAM locations.
+;   NOTE: This routine uses the upper portion of "conBuf" at "ramAry"
+; for a Buffer when validating the RAM.
+; Exit : A = 0 if loc'ns 0..22 are NOT all 0/1.  Non-Z if Invalid (all 0/1s)
+; Uses : AF,BC
+
+NVChk:	PUSH	HL		; Save Regs
+	LD	HL,ramAry	;  Pt to 24-byte Buffer
+	XOR	A		; Start w/Loc'n 0
+	LD	B,24
+NVChk0:	PUSH	AF
+	CALL	RdNV		; Read addressed N-V RAM Byte
+	LD	(HL),A		;   (save)
+	INC	HL		;    advance to next
+	POP	AF		; Restore Byte Index
+	INC	A		;  bump
+	DJNZ	NVChk0		; ..loop til done
+
+; Insure that DS-1202/1302 Clock Chip exists
+
+	LD	HL,ramAry	; Start @ Array beginning
+	LD	B,24		;  do all bytes
+	PUSH	HL		;   (save for 2nd test)
+	PUSH	BC
+	XOR	A		; Check for All Zeros
+NVChk1:	OR	(HL)
+	INC	HL
+	DJNZ	NVChk1		; ..loop til done
+	POP	BC		; (Restore Regs for possible 2nd test)
+	POP	HL
+	OR	A		; All Zeros?
+	JR	Z,NVBad		; ..No Clock if So, Indicate Error
+	LD	A,0FFH		; Check for all 1's
+NVChk2:	AND	(HL)
+	INC	HL
+	DJNZ	NVChk2		; ..loop til done
+	INC	A		; All Ones? (FF->0)
+	JR	NZ,NVGood	; ..jump if Not..DS-1202/1302 is installed
+			;..else fall thru to show Bad.. :-(
+NVBad:	DB	0F6H		; Indicate Bad w/"OR  0AFH", A<>0, NZ
+NVGood:	XOR	A		; Indicate Good, A=0, Z
+NVChkX:	POP	HL		; Restore Regs
+	RET
+
+;.....
+; Compute Checksum of RAM Bytes 0..22 and compare to Stored values
+; Enter: None (ramAry buffer contains all 24 bytes)
+; Exit : A = 0, Zero Set (Z) if Checksum Ok; <>0 (NZ) if Error.
+; Uses : AF,BC
+
+NVChkS:	PUSH	HL		; Save Regs
+	LD	HL,ramAry	;  Pt to Array
+	XOR	A		; Initialize Accum
+	LD	B,24		;  set length (incl 2's compl ChkSum)
+NVChk9:	ADD	A,(HL)		; Add contents
+	INC	HL		;  bump ptr
+	DJNZ	NVChk9		; ..loop til Done
+	POP	HL		; Restore Regs
+	RET			;   return w/A containing Flag
+
+;.....
+; Read RAM Location [0..23] specified in A Reg.
+; Enter: A = RAM Location [0..23] to Read
+; Exit : A = Contents of RAM Location
+; Uses : AF.  All other regs preserved/unaffected
+
+RdNV:	PUSH	BC		; Save Regs
+	ADD	A,A		; Move Address in position
+	OR	11000001B	;  Complete Read Command from Byte #
+	CALL	WrCmd		;   Send to DS1202/1302
+	DI
+	LD	B,8		; Set Bit Count
+RdNV0:	IN0	A,(DRA)		; Read Port A Data
+	RES	RTCClk,A	;  Clk LO
+	OUT0	(DRA),A		;   (set)
+	NOP			;    (settle)
+	IN0	A,(DRA)		;     Read Bit to LSB
+	RRCA			; Data Bit to Carry
+	RR	C		;  to MSB of Accum
+	RLCA			;   Restore Parallel Port bits
+	SET	RTCClk,A	; Clock HI
+	OUT0	(DRA),A		;  (set)
+	DJNZ	RdNV0		; ..loop til byte accumulated
+	EI
+	IN0	A,(DRA)		; Fetch Parallel Port contents
+	SET	RTCClk,A	;  Clk to HI
+	OUT0	(DRA),A
+	RES	RTCRst,A	;   Reset Active LO
+	OUT0	(DRA),A
+	LD	A,C		; Get Accumulated byte
+	POP	BC		;  restore Regs
+	RET
+
+;.....
+; Write Byte in A to Port [0..23] in B.
+
+WrDat:	PUSH	AF		; Save Data to Write
+	LD	A,B		;  Get Port #
+	ADD	A,A		;   Move Address to Bits 5..1
+	OR	11000000B	;    Add Write Mask
+	CALL	WrCmd		;     (set)
+	POP	AF		; Restore Data
+WrExx:	CALL	WrDatV		;  Write it
+	IN0	A,(DDRA)
+	SET	RTCDat,A	; Data Line IN
+	OUT0	(DDRA),A
+	IN0	A,(DRA)		; Fetch Parallel Port contents
+	SET	RTCClk,A	;  Clk to HI
+	OUT0	(DRA),A
+	RES	RTCRst,A	;   Reset Active LO
+	OUT0	(DRA),A
+	RET
+
+;.....
+; Activate N-V RAM, Write Command Byte, Set Chip for Reading
+; Enter: A = DS-1202/1302 Command Byte
+; Exit : None
+; Uses : AF.  All other regs preserved/unaffected
+
+WrCmd:	PUSH	AF		; Save Comnd
+	IN0	A,(DRA)		; Fetch Settings
+	RES	RTCClk,A	;  Clk LO to Start
+	OUT0	(DRA),A		;   (set)
+	SET	RTCRst,A	;    Clear Reset to HI
+	OUT0	(DRA),A		;     (set)
+	POP	AF
+WrDatV:	PUSH	BC		; Save Regs
+	LD	C,A		; Relocate Comd Byte
+	LD	B,8		;  Set Bit Count
+	DI
+	IN0	A,(DDRA)	; Fetch Def'n Reg contents
+	RES	RTCDat,A	;  Data Line to Output
+	OUT0	(DDRA),A	;   (set)
+WrCmd0:	IN0	A,(DRA)		; Read Parallel Port
+	RES	RTCClk,A	;  Clk LO
+	OUT0	(DRA),A		;   (set)
+	SRL	A		; (clear LSB)
+	RR	C		; Data Byte LSB to Carry
+	RLA			;  then to Parallel Port LSB
+	OUT0	(DRA),A		;   (set)
+	SET	RTCClk,A	; Clk HI
+	OUT0	(DRA),A		;  (set)
+	DJNZ	WrCmd0		; ..set all 8 Bits
+
+	IN0	A,(DDRA)
+	SET	RTCDat,A	; Set Port to Data IN
+	OUT0	(DDRA),A
+	EI
+	POP	BC		; Restore Regs
+	RET
+
+;======================================================================
+; Display configured parameters for Non-Volatile Clock RAM if valid,
+; else force setup if clock present or display error if No DS-1202/1302
+; detected.
+
+TCfg:	CALL	NVChk		; See if DS-1202/1302 installed. Load if So
+	JR	Z,TCfg00	; ..jump if Installed
+	LD	HL,cfMs00
+	CALL	PutMsg		; Else Print Message
+	XOR	A		;   clear Error Flag
+	RET
+
+cfMs00:	DEFB	BELL, CR, '+++ No DS1202 detected!', CR, 0
+
+TCfg00:	CALL	NVChkS		; Is CheckSum Ok?
+	JP	Z,TCfgS0	; ..jump if Yes to Display & Enter Set
+	LD	HL,cfMs01
+	CALL	PutMsg		; Else Print Msg
+	JR	TCfgSt		; ..go into Force Set Routine
+
+cfMs01:	DEFB	'--- DS1202 RAM invalid, entering config...', CR, CR, 0
+
+; Default Configuration to provide defaults for Fresh/corrupted RAM
+
+defCfg:	DEFB	0DDH		; Hi-Spd, 2 Mem Wts, 3 IO Wts, 9600 bps
+	DEFB	0C3H, 13H	; Drv0 - 3.5" HD, DS, Mtr, 4mS HL, 3mS Steps
+	DEFB	0C3H, 13H	; Drv1 - 3.5" HD, DS, Mtr, 4mS HL, 3mS Steps
+	DEFB	80H		; GIDE Hard Drive Controller
+	DEFW	615		;  # Tracks
+	DEFB	4		;   # Heads
+	DEFB	17		;    # Sectors-Per-Track
+	DEFB	0		; Hardware flow control = NO
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0
+	DEFB	0		; Byte 23
+DEFLEN	 EQU  $-defCfg
+
+; Force Configuration Set Routine.  Steps through mandatory setting of
+; all bytes.
+
+TCfgSt:	LD	HL,defCfg	; Copy Default Settings
+	LD	DE,ramAry	;  to Local Array
+	LD	BC,DEFLEN
+	LDIR
+	CALL	SetSpd		; Set Hi/Lo Speed
+	CALL	SetMWt
+	CALL	SetIOWt
+	CALL	SetCon
+	CALL	SetFD0
+	CALL	SetFD1
+	CALL	SetHD
+	CALL	SetHDT
+	CALL	SetHDH
+	CALL	SetHDS
+	CALL	SetHFC
+	LD	A,CR
+	CALL	PutChri
+			;..fall thru to main Set..
+; Main Set Loop.  Optional Saving of parameters and restarting.
+
+TCfgS0:	CALL	TCfg01		; Display all parameters
+	LD	HL,cfMs50
+	CALL	PutMsg		; Prompt for Action
+
+ItsBad:	CALL	GetChU
+	CP	CR		; Exit w/No Set?
+	JR	NZ,ItsOk	; ..jump if No
+	CALL	PutChri		; Else go to next line
+	XOR	A		;   return w/No Error
+	RET
+
+ItsOk:	CP	ESC		; Exit with Setting of RAM?
+	JR	NZ,ItsOk0	; ..jump if No
+
+	; To Set the Clock RAM values, we first Unlock the
+	; Write Protect bit
+
+	LD	A,8EH		; Command to Write to W/P Location
+	CALL	WrCmd		;  address it
+	XOR	A		;   Zero Byte Clears W/P bit
+	CALL	WrExx		;    Write the Byte and Clear
+
+	; Now we write all byte values [0..22] & Checksum [23]
+
+	LD	HL,ramAry	; Pt to Data Buffer
+	LD	BC,0		; Initialize CkSum Acc (C), Reg # (B)
+	LD	E,23		;  Write this many from RAM
+ISetLp:	LD	A,(HL)		; Fetch Byte
+	ADD	A,C		;  Update CkSum
+	LD	C,A
+	LD	A,(HL)		; Re-Fetch
+	INC	HL		;  (bump)
+	CALL	WrDat		;   Set Byte in Clock
+	INC	B		;    Address Next Loc'n
+	DEC	E		; Done?
+	JR	NZ,ISetLp	; ..loop if Not
+	LD	A,C		; Else Get CkSum
+	NEG			;  Get 2's Complement
+	CALL	WrDat		;   Write to Loc'n 23
+	LD	HL,setMsg
+	CALL	PutMsg		; Say we're done
+	LD	BC,30000	;  Add little delay
+ISetL0:	DEC	BC		;   to
+	LD	A,B		;    clear
+	OR	C		;     Serial Line
+	JR	NZ,ISetL0	;      so message finishes
+	JP	Ini1		; ..Restart ROM, less basic Initializations..
+
+setMsg:	DEFB	CR,CR,'    (Configuration Complete)',CR,CR,0
+
+ItsOk0:	SUB	'A'
+	JR	C,ItsOk1	; ..jump if < "A" (bad)
+	CP	'K'-'A'+1
+	JR	C,ItsOk2	; ..jump if <= "K" (Ok)
+ItsOk1:	CALL	Squawk		; Beep on Error
+	JR	ItsBad		; ..and Try again
+
+ItsOk2:	LD	L,A		; Save Binary Selection
+	LD	H,0		;  as Word
+	ADD	A,'A'
+	CALL	PutChr		; Echo the Choice
+	ADD	HL,HL		;  Double Selection for Word Index
+	LD	BC,selTb1
+	ADD	HL,BC		;   Offset into Selection Table
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)		; Get Selection Routine Address
+	EX	DE,HL
+	CALL	JPHL		; "Call" the Routine
+	LD	A,CR
+	CALL	PutChri		;  Move to Next Line
+	JP	TCfgS0		; ..back to Re-Display & Prompt
+
+cfMs50:	DEFB	CR,CR, '   RETurn to Exit, ESCape to Set and Restart: ', 0
+
+selTb1:	DEFW	SetSpd		; A - Set CPU Speed (Full/Half)
+	DEFW	SetMwt		; B - Set Additional Memory Wait States
+	DEFW	SetIOwt		; C - Set Additional IO Wait States
+	DEFW	SetCon		; D - Set Console Baud Rate
+	DEFW	SetFD0		; E - Set Floppy Drive 0 Parameters
+	DEFW	SetFD1		; F - Set Floppy Drive 1 Parameters
+	DEFW	SetHD		; G - Set Hard Drive Type
+	DEFW	SetHDT		; H - Set Hard Drive # Tracks
+	DEFW	SetHDH		; I - Set Hard Drive # Heads
+	DEFW	SetHDS		; J - Set Hard Drive # Sctrs/Trk
+	DEFW	SetHFC		; K - Set Flow Control Parameter
+
+JPHL:	JP	(HL)		; A "Call" here Calls addr in HL
+
+setM99:	DEFB	'] : ',0	; Ending Prompt String
+
+;.....
+; A - Set CPU Speed (Full/Half)
+
+SetSpd:	LD	HL,setM20
+	CALL	PutMsg
+	LD	A,(ramAry+0)	; Get byte w/Spd Bit
+	RLA			;  to CF
+	LD	A,'H'		; Half-Speed?
+	JR	NC,SetSp0	; ..jump if Yes
+	LD	A,'F'		;  Else Full
+SetSp0:	CALL	PutChr		; Print it
+	LD	HL,setM99	;  End prompt
+	CALL	PutMsg
+SetSp1:	CALL	GetChU		; Get Char
+	CP	CR		; Accept Default?
+	JR	NZ,SetSp2	; ..jump if Not
+	LD	A,(ramAry+0)
+	LD	B,0
+	RLA			; Move Current
+	RR	B		;  to Conf Reg
+	LD	A,'H'		;   (assume Half-speed)
+	BIT	7,B		; Half?
+	JR	Z,SetSp3	; ..jump if Yes
+	LD	A,'F'		; Else say Full
+	JR	SetSp3		; ..continue
+
+SetSp2:	LD	B,10000000B	; Set Full Default
+	CP	'F'
+	JR	Z,SetSp3	; ..jump if Full Speed
+	LD	B,00000000B
+	CP	'H'
+	JR	Z,SetSp3	; ..jump if Half Speed
+	CALL	Squawk		; Else Beep for Error
+	JR	SetSp1		; ..get another char
+
+SetSp3:	CALL	PutChr		; Echo Selection
+	LD	HL,ramAry+0	; Pt to Byte to Change
+	LD	A,(HL)		;  fetch
+	AND	01111111B	;   mask
+	OR	B
+	LD	(HL),A		;    save new Setting
+	RET
+
+setM20:	DEFB	CR,'    Full (F) or Half (H) CPU Speed       [',0
+
+;.....
+; B - Set Additional Memory Wait States
+
+SetMwt:	LD	HL,setM21
+	CALL	PutMsg
+	LD	A,(ramAry+0)	; Get Current
+	RLCA			;  Move
+	RLCA			;   into
+	RLCA			;    pos'n
+	AND	00000011B
+	OR	'0'
+	CALL	PutChr		;     Print
+	LD	HL,setM99
+	CALL	PutMsg		;      Complete
+
+SetMw0:	CALL	GetChU
+	CP	CR		; Accept Default?
+	JR	NZ,SetMw1	; ..jump if Not
+	LD	A,(ramAry+0)	; Else fetch
+	RLCA			;  Rotate
+	RLCA
+	RLCA
+	AND	00000011B	;   Mask
+	OR	'0'		;    into ASCII
+	JR	SetMw3		;   ..continue
+
+SetMw1:	CP	'0'		; Check response for legal range
+	JR	C,SetMw2
+	CP	'3'+1
+	JR	C,SetMw3	; ..jump if Legal
+SetMw2:	CALL	Squawk		; Else Beep
+	JR	SetMw0		; ..and try again
+
+SetMw3:	CALL	PutChr		; Echo valid selection
+	AND	03H		;  mask off Ascii Bias
+	RRCA			; Move bits
+	RRCA			;  to needed
+	RRCA			;   positions
+	AND	01100000B	;    mask
+	LD	B,A		;     store
+	LD	HL,ramAry+0	; Pt to Byte to Change
+	LD	A,(HL)		;  fetch
+	AND	10011111B	;   mask
+	OR	B
+	LD	(HL),A		;    and Set
+	RET
+
+setM21:	DEFB	CR,'    Additional (0..3) Memory Wait States [',0
+
+;.....
+; C - Set Additional IO Wait States
+
+SetIOwt: LD	HL,setM22
+	CALL	PutMsg
+	LD	A,(ramAry+0)	; Get Default
+	RRCA			;  Position Bits
+	RRCA
+	RRCA
+	AND	00000011B	;   Mask
+	OR	'0'		;    into Ascii
+	CALL	PutChr		;     Print
+	LD	HL,setM99
+	CALL	PutMsg		;      complete
+SetIO0:	CALL	GetChU
+	CP	CR		; Accept Default?
+	JR	NZ,SetIO1	; ..jump if Not
+	LD	A,(ramAry+0)	; Else get current
+	RRCA
+	RRCA
+	RRCA
+	AND	00000011B
+	OR	'0'		;  in Ascii
+	JR	SetIO3		; ..echo and set
+
+SetIO1:	CP	'0'		; Check response for legal range
+	JR	C,SetIO2
+	CP	'3'+1
+	JR	C,SetIO3	; ..jump if Legal
+SetIO2:	CALL	Squawk		; Else Beep
+	JR	SetIO0		; ..and try again
+
+SetIO3:	CALL	PutChr		; Echo valid selection
+	AND	03H		;  mask off Ascii Bias
+	RLCA			; Move bits
+	RLCA			;  to needed
+	RLCA			;   positions
+	AND	00011000B	;    mask
+	LD	B,A		;     store
+	LD	HL,ramAry+0	; Pt to Byte to Change
+	LD	A,(HL)		;  fetch
+	AND	11100111B	;   mask
+	OR	B
+	LD	(HL),A		;    set
+	RET
+
+setM22:	DEFB	CR,'    Additional (0..3) IO Wait States     [',0
+
+;.....
+; D - Set Console Baud Rate.
+
+SetCon:	LD	HL,setM23
+	CALL	PutMsg
+	LD	A,(ramAry+0)	; Get Current setting
+	AND	07H
+	OR	'0'		;  Make Ascii digit
+	CALL	PutChr		;   Print
+	LD	HL,setM99
+	CALL	PutMsg		;    complete
+
+SetCo0:	CALL	GetChU
+	CP	CR		; Accept Default?
+	JR	NZ,SetCo1	; ..jump if Not
+	LD	A,(ramAry+0)	; Else get Current
+	AND	07H
+	OR	'0'		;  in Ascii
+	JR	SetCo3		; ..continue
+
+SetCo1:	CP	'0'
+	JR	C,SetCo2
+	CP	'8'
+	JR	C,SetCo3
+SetCo2:	CALL	Squawk		; Beep if Out-of-Bounds
+	JR	SetCo0		; ..and get another char
+
+SetCo3:	CALL	PutChr		; Echo Selection
+	SUB	'0'		;  make binary
+	LD	B,A		;   save
+	LD	HL,ramAry+0	; Pt to Byte to alter
+	LD	A,(HL)		;  fetch
+	AND	11111000B	;   mask
+	OR	B		; Add new selection
+	LD	(HL),A		;  store new setting in Array
+	RET
+
+setM23:	DEFB	CR,CR,'    Select rate from:',CR
+	DEFB	'      0=300 bps,  1=600 bps,  2=1200 bps,  3=2400 bps',CR
+	DEFB	'      4=4800 bps, 5=9600 bps, 6=19.2 kbps, 7=38.4 kbps',CR
+	DEFB	'  Choice  [',0
+
+;.....
+; E - Set Floppy Drive 0 Parameters
+
+SetFD0:	LD	HL,tcMsg0
+	CALL	PutMsg
+	LD	DE,ramAry+1	; Point to Floppy #0 Data area
+	JR	SetF		;   Set!  Return thru Stack
+
+tcMsg0:	DEFB	CR,'    - Floppy Drive 0:',0
+
+;.....
+; F - Set Floppy Drive 1 Parameters
+
+tcMsg1:	DEFB	CR,'    - Floppy Drive 1:',0
+
+SetFD1:	LD	HL,tcMsg1
+	CALL	PutMsg
+	LD	DE,ramAry+3	; Point to Floppy #1 Data area
+			; ..fall thru to Set!  Return thru Stack
+; Common Code extracted to set either Floppy Drive position
+; Enter: DE -> start of 2-byte Configuration Sequence in RAM Array
+
+SetF:	LD	HL,setM24	; <Drive Size>
+	CALL	PutMsg
+	LD	A,(DE)		; Get Current
+	AND	00000011B
+	OR	'0'		;  in Ascii
+	LD	C,A		;    (save)
+	CALL	PutChr		;   Print
+	LD	HL,setM99
+	CALL	PutMsg		;    complete
+SetF0:	CALL	GetChU
+	CP	CR		; Accept Default?
+	JR	NZ,SetN0	; ..jump if Not
+	LD	A,C		; Else Get Default
+	JR	SetF2		; ..continue
+
+SetN0:	CP	'0'
+	JR	C,SetF1
+	CP	'3'+1
+	JR	C,SetF2		; ..jump if Valid Selection
+SetF1:	CALL	Squawk		; Else Beep
+	JR	SetF0		; ..try another char if invalid
+
+setM24:	DEFB	CR,'    Drive Type (0=8", 1=5"/40Trk, 2=5"/80Trk, 3=3.5")  [',0
+
+SetF2:	CALL	PutChr		; Echo Selection
+	AND	00000011B	;  mask off Ascii Bias
+	LD	C,A		;   save locally
+	SET	7,C		;    (default to HD, all 8" are 500 kbps MFM)
+	SET	2,C		;     (also default to Double-Sided, All HD)
+	JR	Z,SetF3		;    ..bypass HD if 8"
+
+	LD	HL,setM25	; <Hi-Density>
+	CALL	PutMsg
+	LD	A,(DE)		;  Get Current
+	LD	B,A		;   (save)
+	RLA
+	LD	A,'N'		;
+	JR	NC,SetF2A	;  ..jump if Not HD
+	LD	A,'Y'
+SetF2A:	CALL	PutChr		;     Print
+	LD	HL,setM99
+	CALL	PutMsg		;      complete
+	CALL	GetChU
+	CP	CR		; Default?
+	JR	NZ,SetF2B	; ..jump if Not
+	LD	A,'Y'		; Else Default
+	BIT	7,B
+	JR	NZ,SetF2B	;  "Y" if HD
+	LD	A,'N'		;   "N" if Not
+SetF2B:	CP	'Y'		; Explicit "Yes"?
+	JR	Z,SetF4		; ..jump if So, bypass SS/DS, default set
+	LD	A,'N'		; Else Default to "No"
+	RES	7,C		;  set flag
+SetF3:	CALL	PutChr		; Echo Selection
+
+	LD	HL,setM26	; <Single-Sided>
+	CALL	PutMSG
+	BIT	2,B		; SS?
+	LD	A,'N'		;  (Prepare No)
+	JR	NZ,SetF3A	;  ..jump if DS
+	LD	A,'Y'
+SetF3A:	CALL	PutChr		;    Print
+	LD	HL,setM99
+	CALL	PutMsg		;     complete
+	CALL	GetChU
+	CP	CR		; Default?
+	JR	NZ,SetF3B	; ..jump if Not
+	LD	A,'N'
+	BIT	2,B		; SS Dflt?
+	JR	NZ,SetF3B	; ..jump if DS
+	LD	A,'Y'		;    Else set SS
+SetF3B:	RES	2,C		;  (clear sides bit)
+	CP	'Y'		; Explicit "Yes"?
+	JR	Z,SetF4		; ..jump if So
+	LD	A,'N'		; Else Default to "No"
+	SET	2,C		;  Set flag bit to say so
+SetF4:	CALL	PutChr		; Echo Selection
+
+	LD	HL,setM27	; <Motor Needed>
+	CALL	PutMsg
+	LD	A,'N'
+	BIT	6,B		; Default No?
+	JR	Z,SetF4A	; ..jump if Yes
+	LD	A,'Y'		;  Else say Yes
+SetF4A:	CALL	PutChr		;   Print
+	LD	HL,setM99
+	CALL	PutMsg		;    complete
+	CALL	GetChU
+	CP	CR		; Default?
+	JR	NZ,SetF4B	; ..jump if No
+	LD	A,'N'		; Else
+	BIT	6,B		;  Default
+	JR	Z,SetF4B	; ..jump if No
+	LD	A,'Y'
+SetF4B:	RES	6,C		;  (set default "No")
+	CP	'N'		; Explicit No?
+	JR	Z,SetF5		; ..jump if So
+	SET	6,C		; Else Say Control Needed
+	LD	A,'Y'		;  Set Default
+SetF5:	CALL	PutChr		; Echo Selection
+	LD	A,C
+	LD	(DE),A		;  Save the first configuration byte
+
+	INC	DE		; Advance to 2nd Config Byte
+
+	LD	HL,setM28	; <Head Load Time>
+	CALL	PutMsg
+	LD	A,(DE)		; Get Default
+	RRCA			;  Divide by 16/4
+	RRCA
+	AND	3CH		;   kill junk
+	LD	L,A		;    position
+	LD	H,0
+	PUSH	BC		;      (save regs)
+	PUSH	DE
+	PUSH	HL		;       (and val)
+	CALL	DecOut		;     Print
+	LD	HL,setM99
+	CALL	PutMsg		;      complete
+	POP	DE		;       (restore default to different reg)
+	CALL	GetDec		;  Get Decimal number
+	POP	DE		;      (restore regs)
+	POP	BC
+	CP	60+1		; Legal?
+	JR	C,SetF6		; ..jump if So
+	LD	A,60		; Else load Max number
+SetF6:	ADD	A,3		; Force Rounding Up
+	SRL	A		;  Divide by 4
+	SRL	A		;   discarding remainder (already rounded)
+	OR	A
+	JR	NZ,SetF6A	; .jump if we have value
+	INC	A		;   Else force to minimum value
+SetF6A:	ADD	A,A		; Move to High Nibble
+	ADD	A,A		;  multiply
+	ADD	A,A		;   by
+	ADD	A,A		;    16
+	LD	C,A		;     (save)
+
+	LD	HL,setM29	; <Step Rate>
+	CALL	PutMsg
+	LD	A,(DE)		; Get Default
+	AND	0FH		;  kill junk
+	LD	L,A		;   position
+	LD	H,0
+	PUSH	BC		;     (save regs)
+	PUSH	DE
+	PUSH	HL		;      (and val)
+	CALL	DecOut		;    Print
+	LD	HL,setM99
+	CALL	PutMsg		;     complete
+	POP	DE		;      (restore default to different reg)
+	CALL	GetDec		; Get Decimal number
+	POP	DE		;     (restore regs)
+	POP	BC
+	CP	15+1		; Legal?
+	JR	C,SetF7		; ..maybe, jump to check more
+	LD	A,15		;    Else set to slowest rate
+SetF7:	OR	A		; Anything there?
+	JR	NZ,SetF8	; ..jump if So
+	LD	A,3		; Else set to 3 mS default value
+SetF8:	OR	C		; Form composite byte
+	LD	(DE),A		;  save in array
+	RET
+
+setM25:	DEFB	CR,'     High-Density Drive? (Y/N)      [',0
+setM26:	DEFB	CR,'     Single-Sided Drive? (Y/N)      [',0
+setM27:	DEFB	CR,'     Motor Control Needed? (Y/N)    [',0
+setM28:	DEFB	CR,'     Head Load Time in mS (4..60)   [',0
+setM29:	DEFB	'     Drive Step Rate in mS (1..15)  [',0
+
+;.....
+; G - Set Hard Drive Type
+;  Drive Types identified for Bios Use:
+;	0 = (None)	    1 = Adaptec ACB-4000A	2 = Seagate SCSI
+;	3 = Conner SCSI	    4 = Quantum SCSI		5 = Maxtor SCSI
+;	6 = Syquest SCSI    7 = GIDE (IDE/ATA)
+
+SetHD:	LD	DE,ramAry+5	; Point to SCSI Type Byte
+	LD	HL,setM30
+	CALL	PutMsg
+	LD	A,(DE)		; Get Current
+	CP	7		; IDE?
+	JR	C,SetSc5	; ..jump if No (<7)
+	LD	A,7		; Else make IDE
+SetSc5:	OR	'0'		;  in Ascii
+	LD	C,A		;    (save)
+	CALL	PutChr		;   Print
+	LD	HL,setM99
+	CALL	PutMsg		;    complete
+SetSc0:	CALL	GetChU
+	CP	CR		; Accept Default?
+	JR	NZ,SetSc4	; ..jump if Not
+	LD	A,C		;  Else Get default and continue
+SetSc4:	CP	'0'
+	JR	C,SetSc1
+	CP	'7'+1
+	JR	C,SetSc2	; ..jump if Legal selection
+SetSc1:	CALL	Squawk		; Else Beep
+	JR	SetSc0		; ..and try again
+
+SetSc2:	CALL	PutChr		; Echo Selection
+	SUB	'0'		;   Make binary
+	CP	7		; GIDE?
+	JR	C,SetSc3	; ..jump if Not
+	LD	A,80H		; Else set GIDE Byte Value
+SetSc3:	LD	(DE),A		;  Set in Local Array
+	RET			;   return
+
+setM30:	DEFB	CR,'   Select Hard Drive Type from:'
+	DEFB	CR,'     0=(None)        1=ACB-4000       2=Seagate SCSI'
+	DEFB	CR,'     3=Conner SCSI   4=Quantum SCSI   5=Maxtor SCSI'
+	DEFB	CR,'     6=Syquest SCSI  7=GIDE (IDE/ATA)'
+	DEFB	CR,'          Choice  [',0
+
+;.....
+; H - Set Number of Cylinders on Hard Drive (Logical).  Used by GIDE
+
+SetHDT:	LD	A,CR
+	CALL	PutChri		; Go to Next Line
+SetHD0:	LD	HL,setM31
+	CALL	PutMsg		; Prompt
+	LD	HL,ramAry+6
+	LD	E,(HL)		;  Fetch default
+	INC	HL
+	LD	D,(HL)
+	EX	DE,HL	
+	PUSH	DE		;   (save ptr)
+	PUSH	HL		;    (and val)
+	CALL	DecOut		;    Print
+	LD	HL,setM99
+	CALL	PutMsg		;     complete
+	POP	DE		;      (restore default to different reg)
+	CALL	GetDec		; Get Decimal number
+	POP	HL		;   (restore ptr to different reg)
+	JR	NC,SetHD1	; ..jump if Ok
+	CALL	Squawk		; Else Beep
+	JR	SetHD0		; ..loop
+
+SetHD1:	LD	(HL),D		; Save Result
+	DEC	HL
+	LD	(HL),E
+	RET
+
+setM31:	DEFB	'    Number of Logical Cylinders       [',0
+
+;.....
+; I - Set Number of Heads on Hard Drive (Logical).  Used by GIDE
+
+SetHDH:	LD	A,CR
+	CALL	PutChri		; Go to Next Line
+SetHH0:	LD	HL,setM32
+	CALL	PutMsg		; Prompt
+	LD	HL,ramAry+8
+	LD	E,(HL)		;  Fetch default
+	LD	D,0		;   in 16-bits
+	EX	DE,HL	
+	PUSH	DE		;   (save ptr)
+	PUSH	HL		;    (and val)
+	CALL	DecOut		;    Print
+	LD	HL,setM99
+	CALL	PutMsg		;     complete
+	POP	DE		;      (restore default to different reg)
+	CALL	GetDec		; Get Decimal number
+	POP	HL		;  (restore ptr to different reg) 
+	JR	C,SetHH1	; ..jump if Bad
+	LD	A,D		; Check for excessive value
+	OR	A
+	JR	Z,SetHH2	; ..continue if < 256
+SetHH1:	CALL	Squawk		; Else Beep
+	JR	SetHH0		; ..try again
+
+SetHH2:	LD	(HL),E		; Save Value
+	RET
+
+setM32:	DEFB	'    Number of Logical Heads [1..255]  [',0
+
+;.....
+; J - Set Number of Sectors-Per-Track (Logical).  Used by GIDE
+
+SetHDS:	LD	A,CR
+	CALL	PutChri		; Go to Next Line
+SetHS0:	LD	HL,setM33
+	CALL	PutMsg		; Prompt
+	LD	HL,ramAry+9
+	LD	E,(HL)		;  Fetch default
+	LD	D,0		;   in 16-bits
+	EX	DE,HL	
+	PUSH	DE		;   (save ptr)
+	PUSH	HL		;    (and val)
+	CALL	DecOut		;    Print
+	LD	HL,setM99
+	CALL	PutMsg		;     complete
+	POP	DE		;      (restore default to different reg)
+	CALL	GetDec		; Get Decimal number
+	POP	HL		;  (restore ptr to different reg) 
+	JR	C,SetHS1	; ..jump if Bad
+	LD	A,D		; Check for excessive value
+	OR	A
+	JR	Z,SetHS2	; ..continue if < 256
+SetHS1:	CALL	Squawk		; Else Beep
+	JR	SetHS0		; ..try again
+
+SetHS2:	LD	(HL),E		; Save Value
+	RET
+
+setM33:	DEFB	'    Logical Sectors Per Track         [',0
+
+;.....
+; K - Set Hardware Flow Control Parameter (Y or N)
+
+SetHFC:	LD	A,CR
+	CALL	PutChri
+	LD	HL,setM34
+	CALL	PutMsg		; Prompt
+	LD	A,(ramAry+10)
+	BIT	0,A
+	LD	A,'Y'
+	JR	NZ,ShowHFC
+	LD	A,'N'
+ShowHFC:
+	CALL	PutChr
+	LD	HL,setM99
+	CALL	PutMsg
+	CALL	GetChU
+	CALL	PutChr		; Echo selection
+	LD	HL,ramAry+10
+	CP	CR
+	RET	Z		; Exit with no change if CR pressed
+	SET	0,(HL)		; Assume set HFC = YES
+	CP	'Y'
+	RET	Z		;  and exit if YES
+	RES	0,(HL)		; Anything other than 'Y' is NO
+	RET
+
+setM34:	DEFB	'    Hardware Flow Control? (Y/N)      [',0
+
+;======================================================================
+; This subroutine Sequence Displays current Options from RAM & returns
+
+TCfg01:	LD	DE,ramAry	; Point to Byte Array
+	LD	HL,cfMs02
+	CALL	PutMsg		; Print Status Line
+	LD	A,(DE)
+	LD	HL,cfMs03	;  (default to Full)
+	RLA			; Full Speed?
+	JR	C,TCfg02	; ..jump if Yes
+	LD	HL,cfMs04	;  Else say Half Speed
+TCfg02:	CALL	PutMsg
+	JR	TCfg03
+
+cfMs02:	DEFB	CR, 'A. CPU Speed         : ',0
+cfMs03:	DEFB	'Full',0
+cfMs04:	DEFB	'Half',0
+
+TCfg03:	LD	HL,cfMs05
+	CALL	PutMsg
+	LD	A,(DE)		; Fetch first byte again
+	RRA			;  Shift Bits
+	RRA
+	RRA
+	PUSH	AF		;  (save IO bits in posn)
+	RRA
+	RRA
+	AND	03H
+	OR	'0'		;   Make into ASCII Digit ("0".."3")
+	CALL	PutChr		;    print
+	LD	HL,cfMs06
+	CALL	PutMsg
+	POP	AF		; Restore IO bits
+	AND	03H		;  mask
+	OR	'0'		;   Make into ASCII Digit ("0".."3")
+	CALL	PutChr		;    print
+	JR	TCfg04
+
+cfMs05:	DEFB	CR, 'B. Add. Memory Waits : ', 0
+cfMs06:	DEFB	CR, 'C. Add. I/O Waits    : ', 0
+
+TCfg04:	LD	HL,cfMs07
+	CALL	PutMsg
+	LD	A,(DE)		; Get Byte 0 again
+	AND	07H		; Kill all but Data Rate
+	LD	L,A		;  (store)
+	ADD	A,A		; * 2
+	ADD	A,A		;  * 4
+	ADD	A,L		;   * 5
+	ADD	A,A		;    * 10 (len of Entries
+	LD	HL,ratTbl
+	ADD	A,L		; Offset
+	LD	L,A
+	JR	NC,TCfg05	; ..jump if No Overflow
+	INC	H
+TCfg05:	CALL	PutMsg		;  Print Rate
+	JR	TCfg06
+
+cfMs07:	DEFB	CR, 'D. Console Data Rate : ',0
+ratTbl:	DEFB	'300 bps  ',0	; Constant-length (10-byte) Strings
+	DEFB	'600 bps  ',0
+	DEFB	'1200 bps ',0
+	DEFB	'2400 bps ',0
+	DEFB	'4800 bps ',0
+	DEFB	'9600 bps ',0
+	DEFB	'19.2 kbps',0
+	DEFB	'38.4 kbps',0
+
+TCfg06:	INC	DE		; Advance to RAM+1
+	LD	HL,cfMs08
+	CALL	PutMsg
+	CALL	ShFlpy		; Print Specs for Floppy 0
+
+	INC	DE		; Advance to RAM+3
+	LD	HL,cfMs09
+	CALL	PutMsg
+	CALL	ShFlpy		; Print Specs for Floppy 1
+	JR	TCfg07
+
+cfMs08:	DEFB	CR, 'E. Floppy Drive 0    : ',0
+cfMs09:	DEFB	CR, 'F. Floppy Drive 1    : ',0
+
+TCfg07:	INC	DE		; Advance to RAM+5
+	LD	HL,cfMs10
+	CALL	PutMsg
+	LD	A,(DE)		; Fetch Interface Type
+	LD	HL,gideTp	;  (prepare for GIDE
+	BIT	7,A		; Gide?
+	JR	NZ,TCfg08	; ..jump if Yes
+	AND	07H		; Else mask (just in case)
+	LD	L,A		;  (store)
+	ADD	A,A		; * 2
+	ADD	A,A		;  * 4
+	ADD	A,A		;   * 8
+	ADD	A,L		;    * 9
+	ADD	A,A		;     * 18
+	LD	HL,scsiTp	; Address Table Start
+	ADD	A,L
+	LD	L,A		;  offset
+	JR	NC,TCfg08	; ..jump if No overflow
+	INC	H
+TCfg08:	CALL	PutMsg		; Print SCSI Type
+	JP	TCfg09		; ..continue
+
+cfMs10:	DEFB	CR, 'G. Hard Drive Type   : ',0
+gideTp:	DEFB	'GIDE (IDE/ATA)',0
+scsiTp:	DEFB	'(None)           ',0	; SCSI Type Strs (18-bytes each)
+	DEFB	'Adaptec ACB-4000A',0
+	DEFB	'Seagate SCSI     ',0
+	DEFB	'Conner SCSI      ',0
+	DEFB	'Quantum SCSI     ',0
+	DEFB	'Maxtor SCSI      ',0
+	DEFB	'Syquest SCSI     ',0
+	DEFB	'<reserved>       ',0
+
+TCfg09:	LD	HL,cfMs11
+	CALL	PutMsg
+	LD	HL,(ramAry+6)	; Get # Trks
+	CALL	DecOut		;  Print in Decimal
+
+	LD	HL,cfMs12
+	CALL	PutMsg
+	LD	HL,(ramAry+8)	; Get # Hds in L
+	LD	H,0		;  Clear junk
+	CALL	DecOut		;   Print in Decimal
+
+	LD	HL,cfMs13
+	CALL	PutMsg
+	LD	HL,(ramAry+9)	; Get # Sctrs-Per-Trk
+	LD	H,0		;  Clear junk
+	CALL	DecOut		;   Print in Decimal
+	JR	TCfg10
+
+cfMs11:	DEFB	CR, 'H. Logical Tracks    : ',0
+cfMs12:	DEFB	CR, 'I. Logical Heads     : ',0
+cfMs13: DEFB	CR, 'J. Logical Sctrs/Trk : ',0
+
+TCfg10:	LD	HL,cfMs14
+	CALL	PutMsg
+	LD	A,(ramAry+10)	; Get System Operating Flags
+	BIT	0,A		; Test Hardware Flow Control bit
+	LD	A,'N'
+	JP	Z,PutChr
+	LD	A,'Y'
+	JP	PutChr
+
+cfMs14:	DEFB	CR, 'K. HW Flow Control   : ',0
+
+;.....
+; Print details of Floppy Drive Parameters
+; Enter: DE -> 1st Drive byte
+; Exit : DE -> 2nd Drive byte
+
+ShFlpy:	LD	A,(DE)		; Get Physical Characteristics byte
+	AND	00000011B	;  keep only size
+	PUSH	AF		;   (keep copy as flag)
+	ADD	A,A		; * 2
+	ADD	A,A		;  * 4
+	ADD	A,A		;   * 8
+	ADD	A,A		;    * 16
+	LD	HL,flpMs0
+	ADD	A,L		; Offset to Floppy Size Msg
+	LD	L,A
+	JR	NC,ShFlp0
+	INC	H
+ShFlp0:	CALL	PutMsg		;  Print Size
+	POP	AF		; 8"?
+	JR	Z,ShFlp4	; ..jump if Yes, no HD/MFM meaning here
+	LD	A,(DE)		; Re-fetch byte
+	BIT	7,A		; "High-Density"?
+	LD	HL,flpMs1	;  (assume Yes)
+	JR	NZ,ShFlp1	; ..jump if Yes
+	LD	HL,flpMs2	; Else Say MFM
+ShFlp1:	CALL	PutMsg
+ShFlp4:	LD	A,(DE)		; Re-fetch byte
+	BIT	2,A		; Double-Sided?
+	LD	HL,flpMs3	;  (assume Yes)
+	JR	NZ,ShFlp2	; ..jump if Yes
+	LD	HL,flpMs4	; Else Say Single-Sided
+ShFlp2:	CALL	PutMsg
+	LD	A,(DE)		; Re-fetch byte
+	BIT	6,A		; Motor Control Needed?
+	LD	HL,flpMs5	;  (assume Yes)
+	JR	NZ,ShFlp3	; ..jump if Yes
+	LD	HL,flpMs6	; Else Say No Motor Ctl
+ShFlp3:	CALL	PutMsg
+	LD	HL,spacer	;  move to next line
+	CALL	PutMsg
+	INC	DE		; Advance to Second Drive Byte
+	LD	A,(DE)		; Get Times byte
+	RRA			; Position Head Load bits
+	RRA			;   to show multiples of 4 mS (multiply by 4)
+	AND	3CH		;     mask off Junk
+	LD	L,A
+	LD	H,0		; Position in 16-bit width
+	PUSH	DE
+	CALL	DecOut		;  Print in Decimal
+	POP	DE
+	LD	HL,flpMs7
+	CALL	PutMsg		;   label
+	LD	A,(DE)		; Get byte again
+	AND	0FH		;  mask saving only Step Rate
+	LD	L,A
+	LD	H,0		; Position in 16-bit width
+	PUSH	DE
+	CALL	DecOut		;  Print in Decimal
+	POP	DE
+	LD	HL,flpMs8
+	JP	PutMsg		; ..label, returning thru Stack
+
+flpMs0:	DEFB	'8", ',0,0,0,0,0,0,0,0,0,0,0,0	; 16-byte entries
+	DEFB	'5.25" 40 Trk, ',0,0
+	DEFB	'5.25" 80 Trk, ',0,0
+	DEFB	'3.5" ',0,0,0,0,0,0,0,0,0,0,0
+flpMs1:	DEFB	'HD, ',0
+flpMs2:	DEFB	'MFM, ',0
+flpMs3:	DEFB	'DS, ',0
+flpMs4:	DEFB	'SS, ',0
+flpMs5:	DEFB	'Mtr Ctl, ',0
+flpMs6:	DEFB	'No Mtr, ',0
+flpMs7:	DEFB	' mS Hd Ld, ',0
+flpMs8:	DEFB	' mS Steps',0
+spacer:	DEFB	CR, '                       ',0
+
+;= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+; Wait for a Character, returning uppercase rendition in A
+
+GetChU:	CALL	GetChr		; Use Existing ROM Routine
+	JR	Z,GetChU	; ..loop if Nothing ready
+	AND	7FH		;  (strip MSB)
+	CP	'a'		; < "a"?
+	RET	C		;  return if Yes
+	CP	'z'+1		; > "z"?
+	RET	NC		;  return if Yes
+	AND	5FH		; Else make Uppercase
+	RET			;   return
+
+;.....
+; Get a Decimal in the range of 0..65535.  Uses Debug Utilities, conBuf
+; Enter: DE = Default Number if only RETurn entered
+; Exit : DE = Number / Default
+; Uses : AF,BC,DE,HL
+
+GetDec:	CALL	GetLin		; Read line into conBuf
+	LD	HL,conBuf
+	DEC	HL		; (pre-decr)
+GetDSk:	INC	HL		; Adv to Next
+	LD	A,(HL)		; Get Char
+	CP	' '
+	JR	Z,GetDSk	; ..skip leading Spaces
+	CP	CR		; Null Line (default)?
+	JR	Z,GetDeX	; ..Exit with Default if Yes
+	LD	DE,0		; Else Initialize Accum
+GetDe0:	LD	A,(HL)		; Get a Character
+	INC	HL		;  Pt to Next
+	CP	CR
+	JR	Z,GetDeX	;   exit, Carry Clear if CR
+	CALL	IsNum		; Digit?
+	JR	C,GetDeX	; ..exit Ok if Not Digit
+	PUSH	HL		; Save Ptr
+	LD	L,E
+	LD	H,D		;  Copy Accum
+	ADD	HL,HL		; * 2
+	JR	C,GetDe9	; ..Err of OV
+	ADD	HL,HL		;  * 4
+	JR	C,GetDe9
+	ADD	HL,DE		;   * 5
+	JR	C,GetDe9
+	ADD	HL,HL		;    * 10
+	JR	C,GetDe9
+	LD	E,A		; Position new digit
+	LD	D,0
+	ADD	HL,DE
+	EX	DE,HL		; Prepare result
+GetDe9:	POP	HL		;  restore Ptr
+	RET	C		; .error Exit
+	JR	GetDe0		; ..back for More
+
+GetDeX:	LD	A,E		; Get Low byte of Result
+	OR	A		; Clear Error Indicator
+	RET
+
+;.....
+; Check char in A for Numeral.  Return Carry Set if Not, else binary value
+
+IsNum:	SUB	'0'		; Subtract Ascii Bias
+	RET	C
+	CP	9+1
+	CCF
+	RET
+
+;.....
+; Beep at the operator
+
+Squawk:	LD	A,BELL		; Send the Bell Char
+	JP	PutChr		;  to terminal, returning thru Stack
+
+;- - - - - - - - (End of CLKRAM.180) - - - - - - - - -
+
