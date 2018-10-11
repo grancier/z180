@@ -1,0 +1,299 @@
+                        ; --------------------------------------
+                        ; zasm: assemble "UARTTEST.asm"
+                        ; opts: --z180
+                        ; date: 2018-10-11 17:16:34
+                        ; --------------------------------------
+
+
+                        
+                        
+0000:                   false	equ	0
+0001:                   true	equ	1
+                        ;========== Z180 Internal Interrupt Vectors ========
+                        
+                        ; The following vectors are offsets from the value 
+                        ; loaded in IL, the Interrupt Vector Low register.
+                        
+0000:                   VINT1	equ	0	;External INT-1 pin
+0002:                   VINT2	equ	2	;External INT-2 pin
+0004:                   VPRT0	equ	4	;Timer 0
+0006:                   VPRT1	equ	6	;Timer 1
+0008:                   VDMA0	equ	8	;DMA Ch-0
+000A:                   VDMA1	equ	0ah	;DMA Ch-1
+000C:                   VCSIO	equ	0ch	;Clocked serial I/O
+000E:                   VASC0	equ	0eh	;Asynch. comms. Ch-0
+0010:                   VASC1	equ	10h	;Asynch. comms. Ch-1
+                        
+                        ;========== Z180 System Control Registers ==========
+                        
+                        ;NB These registers may be relocated to multiples of
+                        ; 40H, by setting the IO Control Register (ICR = 3FH)
+                        ; The addresses below are valid with ICR=0 (else they
+                        ; are offsets from the ICR base value).
+                        
+                        ;ASCI Registers
+0000:                   cntla0  equ     00h     ;ASCI Control Reg A Ch0
+0001:                   cntla1  equ     01h     ;ASCI Control Reg A Ch1
+0002:                   cntlb0  equ     02h     ;ASCI Control Reg B Ch0
+0003:                   cntlb1  equ     03h     ;ASCI Control Reg B Ch1
+0004:                   stat0   equ     04h     ;ASCI Status Reg Ch0
+0005:                   stat1   equ     05h     ;ASCI Status Reg Ch1
+0006:                   tdr0    equ     06h     ;ASCI TX Data Reg Ch0
+0007:                   tdr1    equ     07h     ;ASCI TX Data Reg Ch1
+0008:                   rdr0    equ     08h     ;ASCI RX Data Reg Ch0
+0009:                   rdr1    equ     09h     ;ASCI RX Data Reg Ch1
+0012:                   brk0    equ     12h     ;Break Control Reg Ch0
+0013:                   brk1    equ     13h     ;Break Control reg Ch1
+                        
+                        ;CSI/O Registers
+000A:                   cntr    equ     0ah     ;CSI/O Control Reg
+000B:                   trdr    equ     0bh     ;CSI/O TX/RX Data Reg
+                        
+001F:                   ccr     equ     1fh     ;CPU control reg.
+00DF:                   intype  equ     0dfh    ;Interrupt edge/pin mux reg.
+00D8:                   wsgcs   equ     0d8h    ;Wait-State Generator CS
+00D9:                   enh182  equ     0d9h    ;Z80182 Enhancements Reg
+00DF:                   pinmux  equ     0dfh    ;Interrupt Edge/Pin Mux Reg
+00E6:                   ramubr  equ     0e6h    ;RAM End Boundary
+00E7:                   ramlbr  equ     0e7h    ;RAM Start Boundary
+00E8:                   rombr   equ     0e8h    ;ROM Boundary
+                        
+00E8:                   romend	equ		0e8h
+00E7:                   ramstart	equ	0e7h
+00E6:                   ramend		equ	0e6h
+                        
+00E9:                   fifoctl equ     0e9h    ;FIFO Control Reg
+00EA:                   rtotc   equ     0eah    ;RX Time-Out Time Const
+00EB:                   ttotc   equ     0ebh    ;TX Time-Out Time Const
+00EC:                   fcr     equ     0ech    ;FIFO Register
+00EF:                   scr     equ     0efh    ;System Pin Control
+00F0:                   rbr     equ     0f0h    ;MIMIC RX Buffer Reg
+00F0:                   thr     equ     0f0h    ;MIMIC TX Holding Reg
+00F1:                   ier     equ     0f1h    ;Interrupt Enable Reg
+00F3:                   lcr     equ     0f3h    ;Line Control Reg
+00F4:                   mcr     equ     0f4h    ;Modem Control Reg
+00F5:                   lsr     equ     0f5h    ;Line Status Reg
+00F6:                   msr     equ     0f6h    ;Modem Status Reg
+00F7:                   mscr    equ     0f7h    ;MIMIC Scratch Reg
+00F8:                   dlatl   equ     0f8h    ;Divisor latch LS
+00F9:                   dlatm   equ     0f9h    ;Divisor latch MS
+00FA:                   ttcr    equ     0fah    ;TX Time Constant
+00FB:                   rtcr    equ     0fbh    ;RX Time Constant
+00FC:                   ivec    equ     0fch    ;MIMIC Interrupt Vector
+00FD:                   mimie   equ     0fdh    ;MIMIC Interrupt Enable Reg
+00FE:                   iusip   equ     0feh    ;MIMIC Interrupt Under-Service Reg
+00FF:                   mmcr    equ     0ffh    ;MIMIC Master Control Reg
+                        
+                        ;DMA Registers
+0020:                   sar0l   equ     20h     ;DMA Source Addr Reg Ch0-Low
+0021:                   sar0h   equ     21h     ;DMA Source Addr Reg Ch0-High
+0022:                   sar0b   equ     22h     ;DMA Source Addr Reg Ch0-B
+0023:                   dar0l   equ     23h     ;DMA Destn  Addr Reg Ch0-Low
+0024:                   dar0h   equ     24h     ;DMA Destn  Addr Reg Ch0-High
+0025:                   dar0b   equ     25h     ;DMA Destn  Addr Reg Ch0-B
+0026:                   bcr0l   equ     26h     ;DMA Byte Count Reg Ch0-Low
+0027:                   bcr0h   equ     27h     ;DMA Byte Count Reg Ch0-High
+0028:                   mar1l   equ     28h     ;DMA Memory Addr Reg Ch1-Low
+0029:                   mar1h   equ     29h     ;DMA Memory Addr Reg Ch1-High
+002A:                   mar1b   equ     2ah     ;DMA Memory Addr Reg Ch1-B
+002B:                   iar1l   equ     2bh     ;DMA I/O Addr Reg Ch1-Low
+002C:                   iar1h   equ     2ch     ;DMA I/O Addr Reg Ch1-High
+002E:                   bcr1l   equ     2eh     ;DMA Byte Count Reg Ch1-Low
+002F:                   bcr1h   equ     2fh     ;DMA Byte Count Reg Ch1-High
+0030:                   dstat   equ     30h     ;DMA Status Reg
+0031:                   dmode   equ     31h     ;DMA Mode Reg
+0032:                   dcntl   equ     32h     ;DMA/WAIT Control Reg
+                        
+                        
+                        ;System Control Registers
+0033:                   il      equ     33h     ;INT Vector Low Reg
+0034:                   itc     equ     34h     ;INT/TRAP Control Reg
+0036:                   rcr     equ     36h     ;Refresh Control Reg
+0038:                   cbr     equ     38h     ;MMU Common Base Reg
+0039:                   bbr     equ     39h     ;MMU Bank Base Reg
+003A:                   cbar    equ     3ah     ;MMU Common/Bank Area Reg
+003E:                   omcr    equ     3eh     ;Operation Mode Control Reg
+003F:                   icr     equ     3fh     ;I/O Control Reg
+                        
+                        ;--- Character Device Section ---
+                        
+                        
+                        		; The following two devices result in non-standard data rates
+                        		; with the standard 16.00 MHz crystal in the P112.  If a more
+                        		; "standard" crystal is used (12.288, 18.432, 24.576 MHz etc)
+                        		; is used, the ports become usable.
+                        		;   Driver code for ASCI0 and ASCI1 includes an option for
+                        		; assembling Polled or Interrupt-driven buffered input.
+                        		; Select the desired option for ASCI0 with the BUFFA0 flag,
+                        		; and BUFFA1 for ASCI1.
+0000:                   ASCI_0	EQU	false		; Include ASCI0 Driver?
+0000:                   BUFFA0	EQU	false		;   Use buffered ASCI0 Input Driver?
+0000:                   ASCI_1	EQU	false		; Include ASCI1 Driver?
+0000:                   BUFFA1	EQU	false		;   Use buffered ASCI1 Input Driver?
+                        
+0020:                   QSIZE	EQU	32		; size of interrupt typeahead buffers (if used)
+                        				; ..must be 2^n with n<8
+0000:                   RTSCTS	EQU	false		; Include RTS/CTS code on Serial Outputs?
+0000:                   XONOFF  EQU false ; Include Xon/Xoff handshaking in Serial lines?
+                        
+                        ?b	equ	0
+***ERROR***              ^ instruction expected
+                        
+                        ;******************************************************************
+                        ;INIT_UART
+                        ;Function: Initialize the UART to BAUD Rate 9600 (1.8432 MHz clock input)
+                        ;DLAB A2 A1 A0 Register
+                        ;0    0  0  0  Receiver Buffer (read),
+                        ;              Transmitter Holding
+                        ;              Register (write)
+                        ;0    0  0  1  Interrupt Enable
+                        ;X    0  1  0  Interrupt Identification (read)
+                        ;X    0  1  0  FIFO Control (write)
+                        ;X    0  1  1  Line Control
+                        ;X    1  0  0  MODEM Control
+                        ;X    1  0  1  Line Status
+                        ;X    1  1  0  MODEM Status
+                        ;X    1  1  1  Scratch
+                        ;1    0  0  0  Divisor Latch
+                        ;              (least significant byte)
+                        ;1    0  0  1  Divisor Latch
+                        ;              (most significant byte)
+                        ;******************************************************************
+                        ;***********************************
+                        ;*  UART Test Program              *
+                        ;*                                 *
+                        ;***********************************
+                        
+0000:                   .ORG 00000H
+                        
+0000:                   INIT_UART:
+0000: 3E80     [ 7]                 LD     A,80H       ; Mask to Set DLAB Flag
+0002: ED                			db      0edh
+0003: D303     [18]     			OUT    (03H),A
+0005: 3E0C     [25]     			LD     A,12        ; Divisor = 12 @ 9600bps w/ 1.8432 Mhz
+0007: D300     [36]     			OUT    (00H),A     ; Set BAUD rate to 9600
+0009: 3E00     [43]     			LD     A,00
+000B: D301     [54]     			OUT    (01H),A     ; Set BAUD rate to 9600
+000D: 3E03     [61]     			LD     A,03H
+000F: D303     [72]     			OUT    (03H),A     ; Set 8-bit data, 1 stop bit, reset DLAB Flag
+                        			
+                        ;******************************************************************
+                        ;Main Program
+                        ;Function: Display A->Z then a new line and loop
+                        ;******************************************************************
+                        
+                        
+0011:                   MAIN_LOOP:   
+0011: DB05     [11]     			IN      A,(05H)        ; Get the line status register's contents
+0013: CB6F     [19]     			BIT     5,A            ; Test BIT, it will be set if the UART is ready
+0015: CA1100   [29|29]  			JP      Z,MAIN_LOOP    
+0018: 3E41     [36]     			LD      A,41H          ; Load acumulator with "A" Character
+001A: D300     [47]     			OUT     (00H),A        ; Send "A" Character through the UART
+001C: C31100   [57]     			JP      MAIN_LOOP
+                        
+                        .END
+
+
+; +++ segments +++
+
+#CODE          = $0000 =     0,  size =  ***VOID***  
+
+; +++ global symbols +++
+
+ASCI_0    = $0000 =     0          UARTTEST.asm:122 (unused)
+ASCI_1    = $0000 =     0          UARTTEST.asm:124 (unused)
+BUFFA0    = $0000 =     0          UARTTEST.asm:123 (unused)
+BUFFA1    = $0000 =     0          UARTTEST.asm:125 (unused)
+INIT_UART = $0000 =     0          UARTTEST.asm:161 (unused)
+MAIN_LOOP = $0011 =    17          UARTTEST.asm:178
+QSIZE     = $0020 =    32          UARTTEST.asm:127 (unused)
+RTSCTS    = $0000 =     0          UARTTEST.asm:129 (unused)
+VASC0     = $000E =    14          UARTTEST.asm:17 (unused)
+VASC1     = $0010 =    16          UARTTEST.asm:18 (unused)
+VCSIO     = $000C =    12          UARTTEST.asm:16 (unused)
+VDMA0     = $0008 =     8          UARTTEST.asm:14 (unused)
+VDMA1     = $000A =    10          UARTTEST.asm:15 (unused)
+VINT1     = $0000 =     0          UARTTEST.asm:10 (unused)
+VINT2     = $0002 =     2          UARTTEST.asm:11 (unused)
+VPRT0     = $0004 =     4          UARTTEST.asm:12 (unused)
+VPRT1     = $0006 =     6          UARTTEST.asm:13 (unused)
+XONOFF    = $0000 =     0          UARTTEST.asm:130 (unused)
+_z180_    = $0001 =     1          :1 (unused)
+bbr       = $0039 =    57          UARTTEST.asm:106 (unused)
+bcr0h     = $0027 =    39          UARTTEST.asm:88 (unused)
+bcr0l     = $0026 =    38          UARTTEST.asm:87 (unused)
+bcr1h     = $002F =    47          UARTTEST.asm:95 (unused)
+bcr1l     = $002E =    46          UARTTEST.asm:94 (unused)
+brk0      = $0012 =    18          UARTTEST.asm:38 (unused)
+brk1      = $0013 =    19          UARTTEST.asm:39 (unused)
+cbar      = $003A =    58          UARTTEST.asm:107 (unused)
+cbr       = $0038 =    56          UARTTEST.asm:105 (unused)
+ccr       = $001F =    31          UARTTEST.asm:45 (unused)
+cntla0    = $0000 =     0          UARTTEST.asm:28 (unused)
+cntla1    = $0001 =     1          UARTTEST.asm:29 (unused)
+cntlb0    = $0002 =     2          UARTTEST.asm:30 (unused)
+cntlb1    = $0003 =     3          UARTTEST.asm:31 (unused)
+cntr      = $000A =    10          UARTTEST.asm:42 (unused)
+dar0b     = $0025 =    37          UARTTEST.asm:86 (unused)
+dar0h     = $0024 =    36          UARTTEST.asm:85 (unused)
+dar0l     = $0023 =    35          UARTTEST.asm:84 (unused)
+dcntl     = $0032 =    50          UARTTEST.asm:98 (unused)
+dlatl     = $00F8 =   248          UARTTEST.asm:71 (unused)
+dlatm     = $00F9 =   249          UARTTEST.asm:72 (unused)
+dmode     = $0031 =    49          UARTTEST.asm:97 (unused)
+dstat     = $0030 =    48          UARTTEST.asm:96 (unused)
+enh182    = $00D9 =   217          UARTTEST.asm:48 (unused)
+false     = $0000 =     0          UARTTEST.asm:3
+fcr       = $00EC =   236          UARTTEST.asm:61 (unused)
+fifoctl   = $00E9 =   233          UARTTEST.asm:58 (unused)
+iar1h     = $002C =    44          UARTTEST.asm:93 (unused)
+iar1l     = $002B =    43          UARTTEST.asm:92 (unused)
+icr       = $003F =    63          UARTTEST.asm:109 (unused)
+ier       = $00F1 =   241          UARTTEST.asm:65 (unused)
+il        = $0033 =    51          UARTTEST.asm:102 (unused)
+intype    = $00DF =   223          UARTTEST.asm:46 (unused)
+itc       = $0034 =    52          UARTTEST.asm:103 (unused)
+iusip     = $00FE =   254          UARTTEST.asm:77 (unused)
+ivec      = $00FC =   252          UARTTEST.asm:75 (unused)
+lcr       = $00F3 =   243          UARTTEST.asm:66 (unused)
+lsr       = $00F5 =   245          UARTTEST.asm:68 (unused)
+mar1b     = $002A =    42          UARTTEST.asm:91 (unused)
+mar1h     = $0029 =    41          UARTTEST.asm:90 (unused)
+mar1l     = $0028 =    40          UARTTEST.asm:89 (unused)
+mcr       = $00F4 =   244          UARTTEST.asm:67 (unused)
+mimie     = $00FD =   253          UARTTEST.asm:76 (unused)
+mmcr      = $00FF =   255          UARTTEST.asm:78 (unused)
+mscr      = $00F7 =   247          UARTTEST.asm:70 (unused)
+msr       = $00F6 =   246          UARTTEST.asm:69 (unused)
+omcr      = $003E =    62          UARTTEST.asm:108 (unused)
+pinmux    = $00DF =   223          UARTTEST.asm:49 (unused)
+ramend    = $00E6 =   230          UARTTEST.asm:56 (unused)
+ramlbr    = $00E7 =   231          UARTTEST.asm:51 (unused)
+ramstart  = $00E7 =   231          UARTTEST.asm:55 (unused)
+ramubr    = $00E6 =   230          UARTTEST.asm:50 (unused)
+rbr       = $00F0 =   240          UARTTEST.asm:63 (unused)
+rcr       = $0036 =    54          UARTTEST.asm:104 (unused)
+rdr0      = $0008 =     8          UARTTEST.asm:36 (unused)
+rdr1      = $0009 =     9          UARTTEST.asm:37 (unused)
+rombr     = $00E8 =   232          UARTTEST.asm:52 (unused)
+romend    = $00E8 =   232          UARTTEST.asm:54 (unused)
+rtcr      = $00FB =   251          UARTTEST.asm:74 (unused)
+rtotc     = $00EA =   234          UARTTEST.asm:59 (unused)
+sar0b     = $0022 =    34          UARTTEST.asm:83 (unused)
+sar0h     = $0021 =    33          UARTTEST.asm:82 (unused)
+sar0l     = $0020 =    32          UARTTEST.asm:81 (unused)
+scr       = $00EF =   239          UARTTEST.asm:62 (unused)
+stat0     = $0004 =     4          UARTTEST.asm:32 (unused)
+stat1     = $0005 =     5          UARTTEST.asm:33 (unused)
+tdr0      = $0006 =     6          UARTTEST.asm:34 (unused)
+tdr1      = $0007 =     7          UARTTEST.asm:35 (unused)
+thr       = $00F0 =   240          UARTTEST.asm:64 (unused)
+trdr      = $000B =    11          UARTTEST.asm:43 (unused)
+true      = $0001 =     1          UARTTEST.asm:4 (unused)
+ttcr      = $00FA =   250          UARTTEST.asm:73 (unused)
+ttotc     = $00EB =   235          UARTTEST.asm:60 (unused)
+wsgcs     = $00D8 =   216          UARTTEST.asm:47 (unused)
+
+
+total time: 0.0046 sec.
+1 error
